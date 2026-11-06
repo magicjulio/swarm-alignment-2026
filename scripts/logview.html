@@ -73,7 +73,8 @@
   .step { border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; margin: 8px 0; }
   .step.flag { border-color: var(--bad); background: var(--bad-bg); }
   .sh { font-weight: 600; font-size: 12px; margin-bottom: 4px; display: flex; gap: 6px; align-items: center; }
-  .tag { font-size: 10px; font-weight: 600; padding: 1px 6px; border-radius: 4px; background: var(--bad); color: #fff; }
+  .tag { font-size: 10px; font-weight: 600; padding: 1px 6px; border-radius: 4px; background: var(--accent-bg); color: var(--accent); }
+  .tag.bad { background: var(--bad); color: #fff; }
   .pre { white-space: pre-wrap; word-break: break-word; }
   details.reason { margin: 4px 0; }
   details.reason summary { cursor: pointer; color: var(--muted); font-size: 11px; }
@@ -89,6 +90,17 @@
   button { font: inherit; font-size: 12px; padding: 3px 9px; border: 1px solid var(--line);
            border-radius: 6px; background: var(--bg); color: var(--text); cursor: pointer; }
   .hint { color: var(--muted); font-size: 11px; margin: 14px; }
+  .star { cursor: pointer; color: var(--muted); font-size: 14px; line-height: 1; user-select: none; }
+  .star.on { color: #e0a100; }
+  td.st { width: 22px; padding-right: 0; }
+  #starbtn { font-size: 13px; }
+  #starbtn.on { background: #fff4cc; border-color: #e0a100; color: #8a6200; }
+  #cmt { width: 100%; min-height: 54px; margin: 8px 0 4px; padding: 7px 9px; font: inherit; font-size: 12.5px;
+         border: 1px solid var(--line); border-radius: 6px; background: var(--bg); color: var(--text); resize: vertical; }
+  #cmt.has { border-color: #e0a100; }
+  .cmtstate { font-size: 10.5px; color: var(--muted); height: 14px; }
+  .item .cm { font-size: 11px; color: var(--text); opacity: .85; margin-top: 2px; font-style: italic;
+              display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
   kbd { font-family: var(--mono); font-size: 10px; border: 1px solid var(--line); border-radius: 3px; padding: 0 3px; }
 </style>
 </head>
@@ -97,8 +109,9 @@
   <aside>
     <div id="live">live</div>
     <h2>Experiments</h2><div id="files"></div>
+    <h2 id="sh">★ Starred</h2><div id="starred"></div>
     <h2 id="bh">Batches</h2><div id="batches"></div>
-    <div class="hint"><kbd>j</kbd>/<kbd>k</kbd> next/prev run · <kbd>/</kbd> search · <kbd>Esc</kbd> clear</div>
+    <div class="hint"><kbd>j</kbd>/<kbd>k</kbd> next/prev run · <kbd>s</kbd> star · <kbd>c</kbd> comment · <kbd>/</kbd> search · <kbd>Esc</kbd> clear</div>
   </aside>
   <main>
     <div class="bar"><input id="q" placeholder="Search everything (reasoning, args, answers…)"><span id="filters"></span></div>
@@ -112,10 +125,34 @@
 const $ = s => document.querySelector(s);
 const esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const reEsc = s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+// <name>_steps tags are red (and outline the step) only when the name sounds like a problem
+const BAD = /forbid|violat|error|fail|leak|unsafe|bad|harm|attack/i;
 const BIG = new Set(['steps', 'messages', 'note']);   // rendered specially, never as columns / filters
 
 let S = { files: [], file: null, mtime: 0, rows: [], fields: {}, batch: null,
-          filters: {}, q: '', sel: null, sort: null, raw: false };
+          filters: {}, q: '', sel: null, sort: null, raw: false, marks: {}, starOnly: false };
+
+// ---------- stars / comments (stored server-side in logview_marks.json) ----------
+function keyOf(file, rec, line) {
+  const id = rec.run_id ?? rec.id;
+  return `${file}|${rec.batch ?? ''}|${id != null ? 'run:' + id : 'line:' + line}`;
+}
+const markOf = r => S.marks[keyOf(S.file, r.rec, r.line)];
+async function loadMarks() { S.marks = await fetch('/api/marks').then(r => r.json()).catch(() => S.marks); }
+async function saveMark(row, patch) {
+  const key = keyOf(S.file, row.rec, row.line), cur = S.marks[key] || {};
+  const m = { file: S.file, batch: row.rec.batch ?? null, run_id: row.rec.run_id ?? row.rec.id ?? null, line: row.line,
+              starred: !!cur.starred, comment: cur.comment || '', ...patch, key };
+  S.marks[key] = m;                       // optimistic
+  if (!m.starred && !m.comment.trim()) delete S.marks[key];
+  S.marks = await fetch('/api/marks', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+                                        body: JSON.stringify(m) }).then(r => r.json());
+}
+async function toggleStar(row) {
+  if (!row) return;
+  await saveMark(row, { starred: !markOf(row)?.starred });
+  renderSidebar(); renderFilters(); renderTable(); renderDetail();
+}
 
 // ---------- helpers ----------
 function hl(s) {               // escape + highlight the search query
@@ -171,6 +208,8 @@ function analyze(rows) {
 async function loadFiles() {
   const r = await fetch('/api/files').then(r => r.json());
   S.files = r.files; S.root = r.root;
+  const before = JSON.stringify(S.marks); await loadMarks();
+  if (JSON.stringify(S.marks) !== before && document.activeElement?.id !== 'cmt') { renderTable(); renderFilters(); }
   $('#live').title = r.root; $('#live').textContent = 'live';
   if (!S.file && S.files.length) S.file = S.files.slice().sort((a, b) => b.mtime - a.mtime)[0].name;
   const cur = S.files.find(f => f.name === S.file);
@@ -192,7 +231,7 @@ async function loadFile() {
 function inBatch() { return S.rows.filter(r => S.batch == null || r.rec.batch === S.batch); }
 function visible() {
   const q = S.q.toLowerCase();
-  let v = inBatch().filter(r => Object.entries(S.filters).every(([k, val]) => r.rec[k] === val)
+  let v = inBatch().filter(r => (!S.starOnly || markOf(r)?.starred) && Object.entries(S.filters).every(([k, val]) => r.rec[k] === val)
                              && (!q || r.blob.includes(q)));
   if (S.sort) {
     const { k, dir } = S.sort, key = r => k === '#' ? r.line : Array.isArray(r.rec[k]) ? r.rec[k].length : r.rec[k];
@@ -212,6 +251,15 @@ function renderSidebar() {
       <div class="sub">${f.lines} runs · ${ago(f.mtime)}</div></div>`).join('')
     : '<div class="hint">No .jsonl files found.</div>';
 
+  const stars = Object.entries(S.marks).filter(([, m]) => m.starred || m.comment)
+    .sort((a, b) => String(b[1].updated).localeCompare(String(a[1].updated)));
+  $('#sh').style.display = stars.length ? '' : 'none';
+  $('#starred').innerHTML = stars.map(([k, m]) => `
+    <div class="item ${S.file === m.file && S.rows.find(r => r.line === S.sel && keyOf(S.file, r.rec, r.line) === k) ? 'on' : ''}" data-goto="${esc(k)}">
+      <div><span class="star ${m.starred ? 'on' : ''}">${m.starred ? '★' : '✎'}</span> ${esc(m.run_id != null ? 'run ' + m.run_id : 'line ' + m.line)}
+        <span class="sub">· ${esc(prettyBatch(m.batch || '') || m.file)}</span></div>
+      ${m.comment ? `<div class="cm" title="${esc(m.comment)}">${esc(m.comment)}</div>` : ''}</div>`).join('');
+
   const groups = new Map();
   for (const r of S.rows) if ('batch' in r.rec) {
     const g = groups.get(r.rec.batch) ?? { n: 0, models: new Set(), note: null };
@@ -227,7 +275,8 @@ function renderSidebar() {
 }
 
 function renderFilters() {
-  const parts = [];
+  const nStar = S.rows.filter(r => markOf(r)?.starred).length;
+  const parts = [`<span class="chip ${S.starOnly ? 't' : ''}" id="staronly" title="show only starred runs">★ starred${nStar ? ' ' + nStar : ''}</span>`];
   for (const [k, e] of Object.entries(S.fields)) {
     if (e.kind === 'bool') {
       const v = S.filters[k], cls = v === true ? 't' : v === false ? 'f' : '';
@@ -238,7 +287,7 @@ function renderFilters() {
         `<option ${S.filters[k] === o ? 'selected' : ''} value="${esc(o)}">${esc(k)}: ${esc(o)}</option>`).join('')}</select>`);
     }
   }
-  if (Object.keys(S.filters).length || S.q) parts.push('<button id="clear">clear</button>');
+  if (Object.keys(S.filters).length || S.q || S.starOnly) parts.push('<button id="clear">clear</button>');
   $('#filters').innerHTML = parts.join(' ');
 }
 
@@ -280,9 +329,10 @@ function renderTable() {
   if (!S.file) { $('#table').innerHTML = '<div class="empty">No logs yet.</div>'; return; }
   if (!rows.length) { $('#table').innerHTML = '<div class="empty">No runs match.</div>'; return; }
   const arrow = k => S.sort?.k === k ? (S.sort.dir > 0 ? ' ▲' : ' ▼') : '';
-  $('#table').innerHTML = `<table><thead><tr><th data-sort="#">#${arrow('#')}</th>${cols.map(c =>
+  $('#table').innerHTML = `<table><thead><tr><th></th><th data-sort="#">#${arrow('#')}</th>${cols.map(c =>
       `<th data-sort="${esc(c)}">${esc(c)}${arrow(c)}</th>`).join('')}</tr></thead><tbody>${rows.map(r => `
     <tr class="r ${r.line === S.sel ? 'on' : ''}" data-line="${r.line}">
+      <td class="st"><span class="star ${markOf(r)?.starred ? 'on' : ''}" data-star="${r.line}" title="${esc(markOf(r)?.comment || 'star (s)')}">${markOf(r)?.starred ? '★' : markOf(r)?.comment ? '✎' : '☆'}</span></td>
       <td class="no">${r.line}</td>${cols.map(c => `<td title="${esc(typeof r.rec[c] === 'string' ? r.rec[c].slice(0, 500) : '')}">${cell(r.rec[c])}</td>`).join('')}</tr>`).join('')}
     </tbody></table>`;
   $('tr.r.on')?.scrollIntoView({ block: 'nearest' });
@@ -298,8 +348,8 @@ function flagsFor(rec) {        // keys like forbidden_read_steps: [3] -> highli
 function renderSteps(steps, flags) {
   return steps.map((s, i) => {
     if (typeof s !== 'object' || s === null) return `<div class="step pre">${hl(JSON.stringify(s))}</div>`;
-    const n = s.step ?? i, fl = flags.get(n) || [];
-    let h = `<div class="step ${fl.length ? 'flag' : ''}"><div class="sh">step ${esc(n)} ${fl.map(f => `<span class="tag">${esc(f)}</span>`).join('')}</div>`;
+    const n = s.step ?? i, fl = flags.get(n) || [], isBad = f => BAD.test(f);
+    let h = `<div class="step ${fl.some(isBad) ? 'flag' : ''}"><div class="sh">step ${esc(n)} ${fl.map(f => `<span class="tag ${isBad(f) ? 'bad' : ''}">${esc(f)}</span>`).join('')}</div>`;
     for (const t of s.reasoning || []) h += `<details class="reason" open><summary>thinking</summary><div class="pre">${hl(t)}</div></details>`;
     for (const c of s.calls || []) {
       const args = typeof c.args === 'string' ? c.args : JSON.stringify(c.args);
@@ -317,12 +367,15 @@ function renderMessages(msgs) {
 }
 
 function renderDetail() {
+  if (document.activeElement?.id === 'cmt') return;     // don't clobber a comment being typed
   const row = S.rows.find(r => r.line === S.sel);
   if (!row) { $('#detail').innerHTML = '<div class="empty">Select a run</div>'; return; }
-  const rec = row.rec;
+  const rec = row.rec, mk = markOf(row) || {};
   let h = `<div style="display:flex;justify-content:space-between;align-items:center">
     <span class="loc">${esc(S.file)}:${row.line}</span>
-    <span><button id="copy" title="copy a jq command that prints this run">copy jq</button> <button id="raw">${S.raw ? 'transcript' : 'raw JSON'}</button></span></div>`;
+    <span><button id="starbtn" class="${mk.starred ? 'on' : ''}" title="star this run (s)">${mk.starred ? '★ starred' : '☆ star'}</button> <button id="copy" title="copy a jq command that prints this run">copy jq</button> <button id="raw">${S.raw ? 'transcript' : 'raw JSON'}</button></span></div>`;
+  h += `<textarea id="cmt" class="${mk.comment ? 'has' : ''}" placeholder="Comment: why is this run interesting? (saved automatically)">${esc(mk.comment || '')}</textarea>
+    <div class="cmtstate" id="cmtstate">${mk.updated ? 'saved ' + esc(mk.updated) : ''}</div>`;
   if (S.raw) { $('#detail').innerHTML = h + `<div class="json" style="margin-top:10px">${hl(JSON.stringify(rec, null, 2))}</div>`; return; }
 
   const scal = Object.entries(rec).filter(([k, v]) => v === null || typeof v !== 'object');
@@ -338,19 +391,31 @@ function renderDetail() {
 
 // ---------- URL state (so a reload / link keeps your place) ----------
 function saveHash() {
-  const st = { f: S.file, b: S.batch, l: S.sel, q: S.q || undefined, fl: Object.keys(S.filters).length ? S.filters : undefined };
+  const st = { f: S.file, b: S.batch, l: S.sel, q: S.q || undefined, fl: Object.keys(S.filters).length ? S.filters : undefined, so: S.starOnly || undefined };
   history.replaceState(null, '', '#' + encodeURIComponent(JSON.stringify(st)));
 }
 function loadHash() {
   try {
     const st = JSON.parse(decodeURIComponent(location.hash.slice(1)));
-    Object.assign(S, { file: st.f ?? null, batch: st.b ?? null, sel: st.l ?? null, q: st.q || '', filters: st.fl || {} });
+    Object.assign(S, { file: st.f ?? null, batch: st.b ?? null, sel: st.l ?? null, q: st.q || '', filters: st.fl || {}, starOnly: !!st.so });
     $('#q').value = S.q;
   } catch {}
 }
 
 // ---------- events ----------
 document.addEventListener('click', async e => {
+  const st = e.target.closest('[data-star]');
+  if (st) { e.stopPropagation(); return toggleStar(S.rows.find(r => r.line === +st.dataset.star)); }
+  if (e.target.closest('#starbtn')) return toggleStar(S.rows.find(r => r.line === S.sel));
+  if (e.target.closest('#staronly')) { S.starOnly = !S.starOnly; return render(); }
+  const go = e.target.closest('[data-goto]');
+  if (go) {
+    const m = S.marks[go.dataset.goto]; if (!m) return;
+    if (m.file !== S.file) { S.file = m.file; S.filters = {}; S.sort = null; S.mtime = 0; await loadFile(); }
+    const row = S.rows.find(r => keyOf(S.file, r.rec, r.line) === go.dataset.goto);
+    S.batch = row?.rec.batch ?? null; S.sel = row?.line ?? null; S.q = ''; $('#q').value = '';
+    return render();
+  }
   const t = e.target.closest('[data-file],[data-batch],[data-bool],tr.r,th[data-sort],#clear,#raw,#copy');
   if (!t) return;
   if (t.dataset.file != null) { S.file = t.dataset.file; S.batch = null; S.sel = null; S.filters = {}; S.sort = null; S.mtime = 0; await loadFile(); return; }
@@ -359,7 +424,7 @@ document.addEventListener('click', async e => {
     if (v === undefined) S.filters[k] = true; else if (v === true) S.filters[k] = false; else delete S.filters[k]; }
   else if (t.dataset.line) { S.sel = +t.dataset.line; }
   else if (t.dataset.sort) { const k = t.dataset.sort; S.sort = S.sort?.k !== k ? { k, dir: 1 } : S.sort.dir > 0 ? { k, dir: -1 } : null; }
-  else if (t.id === 'clear') { S.filters = {}; S.q = ''; $('#q').value = ''; }
+  else if (t.id === 'clear') { S.filters = {}; S.q = ''; S.starOnly = false; $('#q').value = ''; }
   else if (t.id === 'raw') { S.raw = !S.raw; }
   else if (t.id === 'copy') {
     const path = (S.root + '/' + S.file).replaceAll("'", "'\\''");
@@ -373,14 +438,30 @@ document.addEventListener('change', e => {
   if (e.target.value === '') delete S.filters[k]; else S.filters[k] = e.target.value;
   render();
 });
+let ct;
+document.addEventListener('input', e => {
+  if (e.target.id !== 'cmt') return;
+  const row = S.rows.find(r => r.line === S.sel), val = e.target.value;
+  $('#cmtstate').textContent = 'saving…';
+  clearTimeout(ct);
+  ct = setTimeout(async () => {
+    await saveMark(row, { comment: val });
+    e.target.classList.toggle('has', !!val.trim());
+    const m = markOf(row); $('#cmtstate').textContent = m ? 'saved ' + m.updated : 'cleared';
+    renderSidebar(); renderTable();
+  }, 500);
+});
+document.addEventListener('focusout', e => { if (e.target.id === 'cmt') setTimeout(renderDetail, 600); });
 let qt;
 $('#q').addEventListener('input', e => { clearTimeout(qt); qt = setTimeout(() => { S.q = e.target.value; render(); }, 120); });
 document.addEventListener('keydown', e => {
-  if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') {
+  if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT' || e.target.tagName === 'TEXTAREA') {
     if (e.key === 'Escape') { e.target.blur(); if (e.target.id === 'q') { e.target.value = ''; S.q = ''; render(); } }
     return;
   }
   if (e.key === '/') { e.preventDefault(); $('#q').focus(); return; }
+  if (e.key === 's' && !e.metaKey && !e.ctrlKey) { toggleStar(S.rows.find(r => r.line === S.sel)); return; }
+  if (e.key === 'c' && !e.metaKey && !e.ctrlKey && $('#cmt')) { e.preventDefault(); $('#cmt').focus(); return; }
   if (e.key === 'Escape') { S.filters = {}; S.q = ''; $('#q').value = ''; render(); return; }
   const dir = { j: 1, ArrowDown: 1, k: -1, ArrowUp: -1 }[e.key];
   if (!dir) return;
@@ -392,7 +473,7 @@ document.addEventListener('keydown', e => {
 
 // ---------- go ----------
 loadHash();
-loadFiles().then(() => { if (!S.rows.length && S.file) loadFile(); else render(); });
+loadMarks().then(loadFiles).then(() => { if (!S.rows.length && S.file) loadFile(); else render(); });
 setInterval(() => loadFiles().catch(() => { $('#live').textContent = 'offline'; }), 3000);
 </script>
 </body>
