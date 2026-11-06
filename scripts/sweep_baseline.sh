@@ -19,7 +19,7 @@ run_cell() {
 
 for model in deepseek-v4-flash qwen3.8-27b; do
  for exit in request report_blocked; do
-  for rule in both readme; do
+  for rule in both; do   # readme-only dropped: agents read README + finance/ in the same step (uninformed)
    for stakes in none deadline; do
     for lifted in 0 1; do
      while [ "$(jobs -rp | wc -l)" -ge "$PAR" ]; do wait -n; done
