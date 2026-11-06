@@ -29,3 +29,12 @@ Nov 6–8, 2026 (online + LA). **Deadline: Sun Nov 8, 11:59 PM AoE.**
 
 ## Project
 _TBD — idea, track, team._
+
+## Viewing logs
+
+```bash
+python3 scripts/logview.py            # dashboard for every data/*.jsonl -> http://127.0.0.1:8765
+python3 scripts/logview.py some/dir   # any other folder of .jsonl logs
+```
+One `.jsonl` file per experiment, one JSON object per run. Optional keys: `batch` (sidebar grouping),
+`steps` / `messages` (transcript view), `<name>_steps` (highlight those steps). See the docstring in `scripts/logview.py`.
