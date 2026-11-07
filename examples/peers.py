@@ -36,6 +36,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "final"))
 import locked_folder as base                      # noqa: E402  frozen exp01-04 core
+import retry  # noqa: E402  re-sends transient API failures
 from adaption import AsyncAdaption                # noqa: E402
 
 WORDING = "forbidden_permission"
@@ -177,7 +178,7 @@ async def run_once(client, run_id, model, cond):
     try:
         for step in range(base.MAX_STEPS):
             no_board = CONDITIONS[cond] is None
-            resp = await client.responses.create(model=model, instructions=SYSTEM_T0 if no_board else SYSTEM,
+            resp = await retry.create(client, model=model, instructions=SYSTEM_T0 if no_board else SYSTEM,
                                                  input=history, tools=W["tools"] if no_board else TOOLS,
                                                  max_output_tokens=MAX_OUTPUT_TOKENS, timeout=180)
             rec["cost"] += resp.usage.cost or 0.0
@@ -234,7 +235,7 @@ async def main():
     ap.add_argument("--note", required=True)
     ap.add_argument("-m", "--model", default="deepseek-v4-flash")
     ap.add_argument("-n", type=int, default=100)
-    ap.add_argument("-c", "--concurrency", type=int, default=10)
+    ap.add_argument("-c", "--concurrency", type=int, default=50, help="parallel runs (API errors are retried)")
     ap.add_argument("--out", default=str(ROOT / "data" / "peers_realistic_runs.jsonl"))
     a = ap.parse_args()
     client, sem, done, t0 = AsyncAdaption(), asyncio.Semaphore(a.concurrency), 0, time.time()

@@ -26,6 +26,7 @@ import time
 from datetime import date, timedelta
 from pathlib import Path
 
+import retry  # noqa: E402  re-sends transient API failures
 from adaption import AsyncAdaption
 from dotenv import load_dotenv
 
@@ -356,7 +357,7 @@ async def run_once(client, run_id, model, wording="restricted"):
     history = [{"role": "user", "content": USER_PROMPT}]
     try:
         for step in range(MAX_STEPS):
-            resp = await client.responses.create(model=model, instructions=w["system"], input=history,
+            resp = await retry.create(client, model=model, instructions=w["system"], input=history,
                                                  tools=w["tools"], max_output_tokens=MAX_OUTPUT_TOKENS, timeout=120)
             rec["cost"] += resp.usage.cost or 0.0
             if getattr(resp, "status", None) == "incomplete":
@@ -405,7 +406,7 @@ async def main():
     ap.add_argument("--note", required=True, help="what is new in this batch / what it tests")
     ap.add_argument("-m", "--model", default="deepseek-v4-flash")
     ap.add_argument("-n", type=int, default=50, help="number of runs")
-    ap.add_argument("-c", "--concurrency", type=int, default=10)
+    ap.add_argument("-c", "--concurrency", type=int, default=50, help="parallel runs (API errors are retried)")
     ap.add_argument("--wording", choices=list(WORDINGS), default="restricted",
                     help="how the rule is phrased (default: the baseline wording)")
     ap.add_argument("--out", default=str(ROOT / "data" / "baseline_runs.jsonl"), help="log file (= experiment)")
