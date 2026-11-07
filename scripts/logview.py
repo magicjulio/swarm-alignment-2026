@@ -14,8 +14,9 @@ Works with any JSON-object-per-line log. Optional conventions unlock extra views
                 contains forbid/violat/error/fail/leak/unsafe/bad/harm/attack)
 Booleans become filter chips + rates with 95% CIs; short strings become dropdown filters.
 
-Stars + comments (press s / click ☆ on a run) are saved to <dir>/logview_marks.json, keyed by
-file + batch + run_id (falls back to line number), so they survive edits to the logs.
+Stars + comments (press s / click ☆ on a run, or ☆ next to a batch) are saved to
+<dir>/logview_marks.json, keyed by file + batch + run_id (falls back to line number; whole batches
+use "batch"), so they survive edits to the logs.
 
 Binds to 127.0.0.1 only. The page re-reads files every few seconds, so runs show up live.
 """
@@ -104,7 +105,7 @@ def make_handler(root: Path, marks_path: Path):
                 return self.reply(400, {"error": "bad request"})
             with lock:
                 marks = read_marks()
-                m = {k: body.get(k) for k in ("file", "batch", "run_id", "line", "starred", "comment")}
+                m = {k: body.get(k) for k in ("file", "batch", "run_id", "line", "kind", "starred", "comment")}
                 m["comment"] = (m["comment"] or "").strip()
                 if m["starred"] or m["comment"]:
                     marks[key] = m | {"updated": time.strftime("%Y-%m-%d %H:%M:%S")}
