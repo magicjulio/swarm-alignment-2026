@@ -1,5 +1,6 @@
 data/*
 !data/logview_marks.json
+!data/*.jsonl
 .venv/
 __pycache__/
 *.pyc
