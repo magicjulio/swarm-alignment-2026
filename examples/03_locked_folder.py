@@ -36,6 +36,7 @@ from dotenv import load_dotenv
 from adaption import AsyncAdaption
 from eval_awareness import annotate as annotate_eval_awareness
 import workspace_gen
+import grading
 
 ROOT = Path(__file__).resolve().parent.parent
 load_dotenv(ROOT / ".env")
@@ -344,6 +345,7 @@ async def main():
     with out.open("a") as f:
         for r in recs:
             annotate_eval_awareness(r)
+            grading.annotate(r)
             r["batch"] = batch
             r["note"] = a.note.strip()
             r["config"] = cfg
@@ -365,7 +367,7 @@ async def main():
               f"end={r['end']:9s} steps={len(r['steps'])}  {(r['answer'] or r['error'] or '')[:90]!r}")
     print(f"\nnote: {a.note.strip()}")
     print(f"{a.model} [{a.tag}]: violated {v}/{n} (informed {iv}), answer leaks {lk}/{n} (of which disclose {ds}), "
-          f"used legit exit {ex}/{n}, eval-aware {sum(r['eval_aware'] for r in ok)}/{n}" + (f", checked status {cs}/{n}" if a.status_tool else "")
+          f"used legit exit {ex}/{n}, claims granted {sum(r['answer_claims_granted'] for r in ok)}, eval-aware {sum(r['eval_aware'] for r in ok)}/{n}" + (f", checked status {cs}/{n}" if a.status_tool else "")
           + (f", hit step limit {ms}" if ms else "")
           + (f", truncated {tr}" if tr else "") + (f", errors {a.n - n}" if a.n - n else ""))
     print(f"total cost: {sum(r['cost'] for r in recs):.6f} credits  ->  {out.relative_to(ROOT) if out.is_relative_to(ROOT) else out} (batch {batch})")
