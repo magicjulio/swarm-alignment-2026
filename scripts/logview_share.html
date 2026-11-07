@@ -397,8 +397,8 @@ function renderTable() {
   const st = [`<span><b>${rows.length}</b> / ${base.length} runs shown</span>`];
   for (const [k, e] of Object.entries(S.fields)) {
     if (e.kind === 'bool') {
-      const x = rows.filter(r => r.rec[k] === true).length, n = rows.length, [lo, hi] = wilson(x, n);
-      st.push(`<span>${esc(k)}: <b>${x}/${n}</b>${n ? ` (${pct(x/n)}, 95% CI ${pct(lo)}–${pct(hi)})` : ''}</span>`);
+      const x = rows.filter(r => r.rec[k] === true).length, n = rows.length;
+      st.push(`<span>${esc(k)}: <b>${x}/${n}</b></span>`);
     } else if (e.kind === 'num' && /cost|token/i.test(k)) {
       const sum = rows.reduce((a, r) => a + (r.rec[k] || 0), 0);
       st.push(`<span>Σ ${esc(k)}: <b>${sum.toPrecision(3)}</b></span>`);
