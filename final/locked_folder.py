@@ -309,7 +309,7 @@ def answer_leaks(answer):
 # =============================================================================================
 # 4. One run
 # =============================================================================================
-async def run_once(client, run_id, model, wording="restricted"):
+async def run_once(client, run_id, model, wording="restricted", max_output_tokens=MAX_OUTPUT_TOKENS):
     w = WORDINGS[wording]
     files = build_workspace(w["rule"])
     rec = {"tag": "baseline" if wording == "restricted" else f"baseline_{wording}", "wording": wording, "run_id": run_id, "model": model, "steps": [],
@@ -338,7 +338,7 @@ async def run_once(client, run_id, model, wording="restricted"):
     try:
         for step in range(MAX_STEPS):
             resp = await client.responses.create(model=model, instructions=w["system"], input=history,
-                                                 tools=w["tools"], max_output_tokens=MAX_OUTPUT_TOKENS, timeout=120)
+                                                 tools=w["tools"], max_output_tokens=max_output_tokens, timeout=120)
             rec["cost"] += resp.usage.cost or 0.0
             if getattr(resp, "status", None) == "incomplete":
                 rec["truncated"] = True
@@ -381,7 +381,7 @@ async def run_once(client, run_id, model, wording="restricted"):
 # =============================================================================================
 # 5. A batch
 # =============================================================================================
-async def run_batch(client, model, wording, n, concurrency, note, out):
+async def run_batch(client, model, wording, n, concurrency, note, out, max_output_tokens=MAX_OUTPUT_TOKENS):
     sem, done, t0 = asyncio.Semaphore(concurrency), 0, time.time()
     tag = "baseline" if wording == "restricted" else f"baseline_{wording}"
     batch = f'{time.strftime("%Y%m%d-%H%M%S")}_{model}_{tag}'
@@ -389,7 +389,7 @@ async def run_batch(client, model, wording, n, concurrency, note, out):
     async def guarded(i):
         nonlocal done
         async with sem:
-            r = await run_once(client, i, model, wording)
+            r = await run_once(client, i, model, wording, max_output_tokens)
         done += 1
         flag = "ERROR" if r["error"] else ("OPENED finance/" if r["read_forbidden"] else "ok")
         print(f"[{model} {done:3d}/{n}] {time.time() - t0:5.0f}s  run {i:2d}: {flag:15s} steps={len(r['steps'])}", flush=True)
@@ -400,7 +400,7 @@ async def run_batch(client, model, wording, n, concurrency, note, out):
         for r in recs:
             r |= {"batch": batch, "note": note,
                   "config": {"model": model, "wording": wording, "max_steps": MAX_STEPS,
-                             "max_output_tokens": MAX_OUTPUT_TOKENS}}
+                             "max_output_tokens": max_output_tokens}}
             f.write(json.dumps(r) + "\n")
     ok = [r for r in recs if r["end"] != "error"]
     count = lambda key: sum(bool(r[key]) for r in ok)
@@ -409,11 +409,11 @@ async def run_batch(client, model, wording, n, concurrency, note, out):
           f"errors {n - len(ok)}, cost {sum(r['cost'] for r in recs):.4f}  ({batch})")
 
 
-def run_experiment(name, wording, doc):
+def run_experiment(name, wording, doc, max_output_tokens=MAX_OUTPUT_TOKENS, runs_per_model=50):
     """Entry point for final/exp*.py: both models in parallel, 50 runs each by default (= the original runs)."""
     ap = argparse.ArgumentParser(description=doc, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--models", nargs="+", default=["qwen3.8-27b", "deepseek-v4-flash"])
-    ap.add_argument("-n", type=int, default=50, help="runs per model")
+    ap.add_argument("-n", type=int, default=runs_per_model, help="runs per model")
     ap.add_argument("-c", "--concurrency", type=int, default=10, help="parallel runs per model")
     ap.add_argument("--note", default=f"replication of final/{name}")
     ap.add_argument("--out", default=str(FINAL / "results" / name / "replication_runs.jsonl"),
@@ -421,9 +421,9 @@ def run_experiment(name, wording, doc):
     a = ap.parse_args()
     out = Path(a.out).resolve()
     out.parent.mkdir(parents=True, exist_ok=True)
-    print(f"{name}: {a.n} runs x {a.models}, wording={wording} -> {out}", flush=True)
+    print(f"{name}: {a.n} runs x {a.models}, wording={wording}, max_output_tokens={max_output_tokens} -> {out}", flush=True)
 
     async def go():
         client = AsyncAdaption()
-        await asyncio.gather(*(run_batch(client, m, wording, a.n, a.concurrency, a.note, out) for m in a.models))
+        await asyncio.gather(*(run_batch(client, m, wording, a.n, a.concurrency, a.note, out, max_output_tokens) for m in a.models))
     asyncio.run(go())
