@@ -61,6 +61,10 @@
   #note .lbl { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--accent); margin-right: 6px; }
   .item .bnote { font-size: 11px; color: var(--text); opacity: .8; margin-top: 2px;
                  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .tabs { display: flex; gap: 4px; margin: 0 14px 6px; }
+  .tabs button.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .arch { float: right; font-size: 11px; color: var(--muted); cursor: pointer; padding: 0 4px; border-radius: 4px; }
+  .arch:hover { color: var(--text); background: var(--line); }
   .item .bnote.missing { color: var(--bad); opacity: 1; }
   #stats { padding: 8px 12px; border-bottom: 1px solid var(--line); color: var(--muted); font-size: 12px;
            display: flex; flex-wrap: wrap; gap: 4px 16px; background: var(--panel); }
@@ -137,7 +141,7 @@
     <div id="sync"></div>
     <h2>Experiments</h2><div id="files"></div>
     <h2 id="sh">★ Starred and commented</h2><div id="starred"></div>
-    <h2 id="bh">Batches</h2><div id="batches"></div>
+    <h2 id="bh">Batches</h2><div class="tabs" id="btabs"></div><div id="batches"></div>
     <div class="hint"><kbd>j</kbd>/<kbd>k</kbd> next/prev run · <kbd>s</kbd> star · <kbd>c</kbd> comment · <kbd>/</kbd> search · <kbd>Esc</kbd> clear</div>
   </aside>
   <main>
@@ -158,7 +162,7 @@ const BIG = new Set(['steps', 'messages', 'note']);   // rendered specially, nev
 
 let S = { files: [], file: null, rows: [], fields: {}, batch: null, cache: {},
           filters: {}, q: '', sel: null, sort: null, raw: false, marks: {}, starOnly: false,
-          db: null, user: null, me: null, names: {} };
+          db: null, user: null, me: null, names: {}, archived: new Set(), showArchived: false };
 
 // ---------- stars / comments: shared between viewers in the artifact's database ----------
 function keyOf(file, rec, line) {
@@ -217,6 +221,23 @@ async function toggleGroupStar(key, base) {
   }
   renderSidebar();
 }
+// batches can be archived: hidden from the Active tab and from "All batches" stats, kept under Archived
+const isArch = b => S.archived.has(batchKey(b));
+async function toggleArchive(b) {
+  if (!canWrite()) return;
+  const key = batchKey(b), ref = S.db.collection('archive').doc(docId(key)), was = S.archived.has(key);
+  try {
+    if (was) { S.archived.delete(key); await ref.delete(); }
+    else { S.archived.add(key); await ref.set({ key, file: S.file, batch: b, updated: stamp(), ...(S.me ? { by: S.me } : {}) }); }
+    if (S.batch === b) S.batch = null;
+    setSync('');
+  } catch (e) {
+    setSync(e?.code === 'permission_denied' || e?.code === 'not_granted'
+      ? 'You can see the archive but not change it. Ask the owner for edit access.'
+      : 'Could not save: ' + (e?.message || e?.code || 'unknown error'), true);
+  }
+  render();
+}
 function setSync(t, warn) { $('#sync').textContent = t; $('#sync').classList.toggle('warn', !!warn); }
 
 async function resolveNames() {
@@ -248,6 +269,11 @@ async function startMarks() {
     renderSidebar(); renderFilters(); renderTable(); renderDetail();
     resolveNames();
   }, e => { clearTimeout(timer); setSync('Comments stopped syncing (' + (e?.code || 'error') + '). Reload the page to retry.', true); });
+  db.collection('archive').onSnapshot(snap => {
+    S.archived = new Set(snap.docs.map(d => d.data()?.key).filter(Boolean));
+    if (S.batch && isArch(S.batch) !== S.showArchived) S.showArchived = isArch(S.batch);
+    render();
+  }, () => {});
 }
 
 // ---------- helpers ----------
@@ -332,7 +358,8 @@ async function loadFile() {
 }
 
 // ---------- filtering ----------
-function inBatch() { return S.rows.filter(r => S.batch == null || r.rec.batch === S.batch); }
+function inBatch() { return S.rows.filter(r => S.batch != null ? r.rec.batch === S.batch
+                                         : !('batch' in r.rec) || isArch(r.rec.batch) === S.showArchived); }
 function visible() {
   const q = S.q.toLowerCase();
   let v = inBatch().filter(r => (!S.starOnly || markOf(r)?.starred) && Object.entries(S.filters).every(([k, val]) => r.rec[k] === val)
@@ -376,11 +403,17 @@ function renderSidebar() {
     g.n++; if (r.rec.model) g.models.add(r.rec.model); g.note ??= r.rec.note ?? null; groups.set(r.rec.batch, g);
   }
   $('#bh').style.display = groups.size ? '' : 'none';
-  $('#batches').innerHTML = !groups.size ? '' :
-    `<div class="item ${S.batch == null ? 'on' : ''}" data-batch="" tabindex="0"><div>All batches</div><div class="sub">${S.rows.length} runs</div></div>` +
-    [...groups].sort((a, b) => String(b[0]).localeCompare(String(a[0]))).map(([b, g]) => `
+  const nArch = [...groups.keys()].filter(isArch).length;
+  $('#btabs').innerHTML = !groups.size ? '' :
+    `<button data-tab="0" class="${S.showArchived ? '' : 'on'}">Active (${groups.size - nArch})</button>` +
+    `<button data-tab="1" class="${S.showArchived ? 'on' : ''}">Archived (${nArch})</button>`;
+  const shown = [...groups].filter(([b]) => isArch(b) === S.showArchived);
+  const nRuns = shown.reduce((t, [, g]) => t + g.n, 0);
+  $('#batches').innerHTML = !groups.size ? '' : !shown.length ? `<div class="hint">${S.showArchived ? 'Nothing archived. Use ⤓ on a batch to move it here.' : 'All batches are archived.'}</div>` :
+    `<div class="item ${S.batch == null ? 'on' : ''}" data-batch="" tabindex="0"><div>All ${S.showArchived ? 'archived' : 'active'} batches</div><div class="sub">${nRuns} runs</div></div>` +
+    shown.sort((a, b) => String(b[0]).localeCompare(String(a[0]))).map(([b, g]) => `
     <div class="item ${b === S.batch ? 'on' : ''}" data-batch="${esc(b)}" tabindex="0">
-      <div><span class="star ${S.marks[batchKey(b)]?.starred ? 'on' : ''}" data-bstar="${esc(b)}" title="star this batch">${S.marks[batchKey(b)]?.starred ? '★' : '☆'}</span> ${esc(prettyBatch(b))}</div><div class="sub">${g.n} runs · ${esc([...g.models].join(', '))}</div>
+      <div><span class="arch" data-arch="${esc(b)}" title="${S.showArchived ? 'restore to Active' : 'move to Archived'}">${S.showArchived ? '↩ restore' : '⤓'}</span><span class="star ${S.marks[batchKey(b)]?.starred ? 'on' : ''}" data-bstar="${esc(b)}" title="star this batch">${S.marks[batchKey(b)]?.starred ? '★' : '☆'}</span> ${esc(prettyBatch(b))}</div><div class="sub">${g.n} runs · ${esc([...g.models].join(', '))}</div>
       ${g.note ? `<div class="bnote" title="${esc(g.note)}">${esc(g.note)}</div>` : '<div class="bnote missing">no note</div>'}</div>`).join('');
 }
 
@@ -516,6 +549,10 @@ document.addEventListener('click', async e => {
   if (fs) { e.stopPropagation(); return toggleGroupStar(fileKey(fs.dataset.fstar), { file: fs.dataset.fstar, batch: null, kind: 'experiment' }); }
   const bs = e.target.closest('[data-bstar]');
   if (bs) { e.stopPropagation(); return toggleGroupStar(batchKey(bs.dataset.bstar), { file: S.file, batch: bs.dataset.bstar, kind: 'batch' }); }
+  const ar = e.target.closest('[data-arch]');
+  if (ar) { e.stopPropagation(); return toggleArchive(ar.dataset.arch); }
+  const tb = e.target.closest('[data-tab]');
+  if (tb) { S.showArchived = tb.dataset.tab === '1'; if (S.batch && isArch(S.batch) !== S.showArchived) { S.batch = null; S.sel = null; } return render(); }
   const st = e.target.closest('[data-star]');
   if (st) { e.stopPropagation(); return toggleStar(S.rows.find(r => r.line === +st.dataset.star)); }
   if (e.target.closest('#starbtn')) return toggleStar(S.rows.find(r => r.line === S.sel));
@@ -525,14 +562,15 @@ document.addEventListener('click', async e => {
     const m = S.marks[go.dataset.goto]; if (!m) return;
     if (m.file !== S.file) { S.file = m.file; S.filters = {}; S.sort = null; await loadFile(); }
     if (m.kind === 'experiment') { S.batch = null; S.sel = null; return render(); }
-    if (m.kind === 'batch') { S.batch = m.batch; S.sel = null; S.q = ''; $('#q').value = ''; return render(); }
+    if (m.kind === 'batch') { S.showArchived = isArch(m.batch); S.batch = m.batch; S.sel = null; S.q = ''; $('#q').value = ''; return render(); }
     const row = S.rows.find(r => keyOf(S.file, r.rec, r.line) === go.dataset.goto);
     S.batch = row?.rec.batch ?? null; S.sel = row?.line ?? null; S.q = ''; $('#q').value = '';
+    if (S.batch) S.showArchived = isArch(S.batch);
     return render();
   }
   const t = e.target.closest('[data-file],[data-batch],[data-bool],tr.r,th[data-sort],#clear,#raw');
   if (!t) return;
-  if (t.dataset.file != null) { S.file = t.dataset.file; S.batch = null; S.sel = null; S.filters = {}; S.sort = null; render(); await loadFile(); return; }
+  if (t.dataset.file != null) { S.file = t.dataset.file; S.showArchived = false; S.batch = null; S.sel = null; S.filters = {}; S.sort = null; render(); await loadFile(); return; }
   if (t.dataset.batch != null) { S.batch = t.dataset.batch || null; S.sel = null; }
   else if (t.dataset.bool) { const k = t.dataset.bool, v = S.filters[k];
     if (v === undefined) S.filters[k] = true; else if (v === true) S.filters[k] = false; else delete S.filters[k]; }
