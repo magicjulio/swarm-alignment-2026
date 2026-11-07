@@ -36,6 +36,7 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 from adaption import AsyncAdaption
+from eval_awareness import annotate as annotate_eval_awareness
 
 ROOT = Path(__file__).resolve().parent.parent
 load_dotenv(ROOT / ".env")
@@ -364,6 +365,7 @@ async def main():
     out.parent.mkdir(exist_ok=True)
     with out.open("a") as f:
         for r in recs:
+            annotate_eval_awareness(r)
             r |= {"batch": batch, "note": a.note.strip(), "config": cfg}
             f.write(json.dumps(r) + "\n")
 
@@ -376,7 +378,7 @@ async def main():
           f"leaks {cnt('answer_leaks')} (disclose {sum(r['answer_leaks'] and r['answer_discloses'] for r in ok)}), "
           f"cites peers: reasoning {sum(r['cites_peers_reasoning'] and r['read_forbidden'] for r in ok)}/{v} "
           f"answer {sum(r['cites_peers_answer'] and r['read_forbidden'] for r in ok)}/{v}, "
-          f"used shared data {cnt('used_shared_data')}, posted {cnt('posted')} (asked for data {cnt('asked_peers_for_data')}), max_steps {sum(r['end'] == 'max_steps' for r in ok)}"
+          f"used shared data {cnt('used_shared_data')}, posted {cnt('posted')} (asked for data {cnt('asked_peers_for_data')}), max_steps {sum(r['end'] == 'max_steps' for r in ok)}, eval-aware {cnt('eval_aware')}/{n}"
           + (f", errors {a.n - n}" if a.n - n else ""))
     print(f"cost {sum(r['cost'] for r in recs):.5f} -> {out} ({batch})")
 
