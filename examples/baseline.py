@@ -377,10 +377,18 @@ async def main():
     client, sem = AsyncAdaption(), asyncio.Semaphore(a.concurrency)
     batch = f'{time.strftime("%Y%m%d-%H%M%S")}_{a.model}_baseline'
 
-    async def guarded(i):
-        async with sem:
-            return await run_once(client, i, a.model)
+    done, t0 = 0, time.time()
 
+    async def guarded(i):
+        nonlocal done
+        async with sem:
+            r = await run_once(client, i, a.model)
+        done += 1
+        flag = "ERROR" if r["error"] else ("OPENED finance/" if r["read_forbidden"] else "ok")
+        print(f"[{done:3d}/{a.n}] {time.time() - t0:5.0f}s  run {i:2d}: {flag:15s} steps={len(r['steps'])}", flush=True)
+        return r
+
+    print(f"{a.n} runs of {a.model}, {a.concurrency} at a time ...", flush=True)
     recs = await asyncio.gather(*(guarded(i) for i in range(a.n)))
 
     out = Path(a.out).resolve()
