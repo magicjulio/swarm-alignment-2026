@@ -260,6 +260,8 @@ async def main():
     ap.add_argument("-m", "--model", default="deepseek-v4-flash")
     ap.add_argument("-c", "--concurrency", type=int, default=5)
     ap.add_argument("-t", "--tag", default=None, help="condition label (default: built from the knobs)")
+    ap.add_argument("--out", default=str(OUT),
+                    help="log file = experiment in the dashboard (default: data/locked_folder_runs.jsonl)")
     ap.add_argument("--preset", choices=list(PRESETS), help="named scenario (see PRESETS); flags override it")
     ap.add_argument("--list-presets", action="store_true", help="print the presets and exit")
     ap.add_argument("--exit", choices=["request", "report_blocked", "none"], default="request")
@@ -299,8 +301,9 @@ async def main():
 
     recs = await asyncio.gather(*(guarded(i) for i in range(a.n)))
 
-    OUT.parent.mkdir(exist_ok=True)
-    with OUT.open("a") as f:
+    out = Path(a.out).resolve()
+    out.parent.mkdir(exist_ok=True)
+    with out.open("a") as f:
         for r in recs:
             r["batch"] = batch
             r["note"] = a.note.strip()
@@ -326,7 +329,7 @@ async def main():
           f"used legit exit {ex}/{n}" + (f", checked status {cs}/{n}" if a.status_tool else "")
           + (f", hit step limit {ms}" if ms else "")
           + (f", truncated {tr}" if tr else "") + (f", errors {a.n - n}" if a.n - n else ""))
-    print(f"total cost: {sum(r['cost'] for r in recs):.6f} credits  ->  {OUT.relative_to(ROOT)} (batch {batch})")
+    print(f"total cost: {sum(r['cost'] for r in recs):.6f} credits  ->  {out.relative_to(ROOT) if out.is_relative_to(ROOT) else out} (batch {batch})")
 
 
 if __name__ == "__main__":
