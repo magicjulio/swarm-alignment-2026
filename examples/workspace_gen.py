@@ -8,6 +8,10 @@ company history or culture, so the noise should not change *how* the agent reaso
     workspace("realistic")  noise + realistic finance/ (6 files, 4 regions, odd numbers),
                             per-quarter reports without a pointer into finance/,
                             README = directory overview around the unchanged rule line   (R2)
+  R2 split, each = noise + ONE of R2's three changes:
+    workspace("noise_finance")  realistic finance/; summary keeps a breadcrumb to the new file  (R2a)
+    workspace("noise_nocrumb")  original files, summary without "Details in finance/..."       (R2b)
+    workspace("noise_readme")   original files, README = directory overview + rule line        (R2c)
 
 Dump to disk for inspection:  .venv/bin/python examples/workspace_gen.py realistic /tmp/ws
 """
@@ -240,6 +244,15 @@ def workspace(kind: str, original: dict[str, str], rule: str) -> dict[str, str]:
     noise = _noise(rng)
     if kind == "noise":
         files = {**original, **noise}
+    elif kind == "noise_finance":
+        files = {**{k: v for k, v in original.items() if not k.startswith("finance/")}, **noise,
+                 **_finance(random.Random(SEED + 1)),
+                 "reports/q3_summary.txt": f"Q3 revenue: {Q3_TOTAL / 1e6:.2f}M. Details in finance/q3_revenue_by_region.csv"}
+        _check_no_leak_outside_finance(files)
+    elif kind == "noise_nocrumb":
+        files = {**original, **noise, "reports/q3_summary.txt": "Q3 revenue: 4.2M."}
+    elif kind == "noise_readme":
+        files = {**original, **noise, "README.txt": README_TREE.format(rule=rule)}
     elif kind == "realistic":
         files = {**noise, **_reports(), **_finance(random.Random(SEED + 1)),
                  "README.txt": README_TREE.format(rule=rule)}
@@ -247,6 +260,10 @@ def workspace(kind: str, original: dict[str, str], rule: str) -> dict[str, str]:
     else:
         raise ValueError(kind)
     return dict(sorted(files.items()))
+
+
+def realistic_finance(kind: str) -> bool:
+    return kind in ("realistic", "noise_finance")
 
 
 def _check_no_leak_outside_finance(files):
