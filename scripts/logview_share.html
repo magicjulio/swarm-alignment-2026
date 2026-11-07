@@ -199,6 +199,24 @@ async function toggleStar(row) {
   await saveMark(row, { starred: !markOf(row)?.starred });
   renderSidebar(); renderFilters(); renderTable(); renderDetail();
 }
+// whole batches and whole experiments (log files) can be starred too
+const batchKey = b => `${S.file}|${b}|batch`;
+const fileKey = f => `${f}||experiment`;
+async function toggleGroupStar(key, base) {
+  if (!canWrite()) return;
+  const cur = S.marks[key] || {}, ref = S.db.collection('marks').doc(docId(key));
+  const m = { key, ...base, starred: !cur.starred, comment: cur.comment || '' };
+  try {
+    if (!m.starred && !m.comment) { delete S.marks[key]; await ref.delete(); }
+    else { m.updated = stamp(); if (S.me) m.by = S.me; S.marks[key] = m; await ref.set(m); }
+    setSync('');
+  } catch (e) {
+    setSync(e?.code === 'permission_denied' || e?.code === 'not_granted'
+      ? 'You can read stars and comments but not change them. Ask the owner for edit access.'
+      : 'Could not save: ' + (e?.message || e?.code || 'unknown error'), true);
+  }
+  renderSidebar();
+}
 function setSync(t, warn) { $('#sync').textContent = t; $('#sync').classList.toggle('warn', !!warn); }
 
 async function resolveNames() {
@@ -333,7 +351,7 @@ function render() { renderSidebar(); renderFilters(); renderTable(); renderDetai
 function renderSidebar() {
   $('#files').innerHTML = S.files.length ? S.files.map(f => `
     <div class="item ${f.name === S.file ? 'on' : ''}" data-file="${esc(f.name)}" tabindex="0">
-      <div class="nm">${esc(f.name.replace(/\.jsonl$/, '').replaceAll('_', ' '))}</div>
+      <div class="nm"><span class="star ${S.marks[fileKey(f.name)]?.starred ? 'on' : ''}" data-fstar="${esc(f.name)}" title="star this experiment">${S.marks[fileKey(f.name)]?.starred ? '★' : '☆'}</span> ${esc(f.name.replace(/\.jsonl$/, '').replaceAll('_', ' '))}</div>
       <div class="sub">${f.lines} runs · last run ${when(f.mtime)}</div></div>`).join('')
     : '<div class="hint">No logs in this snapshot.</div>';
 
@@ -341,9 +359,14 @@ function renderSidebar() {
     .sort((a, b) => String(b[1].updated).localeCompare(String(a[1].updated)));
   $('#sh').style.display = stars.length ? '' : 'none';
   $('#starred').innerHTML = stars.map(([k, m]) => `
-    <div class="item ${S.file === m.file && S.rows.find(r => r.line === S.sel && keyOf(S.file, r.rec, r.line) === k) ? 'on' : ''}" data-goto="${esc(k)}" tabindex="0">
-      <div><span class="star ${m.starred ? 'on' : ''}">${m.starred ? '★' : '✎'}</span> ${esc(m.run_id != null ? 'run ' + m.run_id : 'line ' + m.line)}
-        <span class="sub">· ${esc(prettyBatch(m.batch || '') || m.file)}</span></div>
+    <div class="item ${m.kind === 'experiment' ? (S.file === m.file && S.batch == null && S.sel == null ? 'on' : '')
+        : m.kind === 'batch' ? (S.file === m.file && S.batch === m.batch && S.sel == null ? 'on' : '')
+        : S.file === m.file && S.rows.find(r => r.line === S.sel && keyOf(S.file, r.rec, r.line) === k) ? 'on' : ''}" data-goto="${esc(k)}" tabindex="0">
+      <div><span class="star ${m.starred ? 'on' : ''}">${m.starred ? '★' : '✎'}</span> ${m.kind === 'experiment'
+        ? `<b>experiment</b> <span class="sub">· ${esc(m.file.replace(/\.jsonl$/, '').replaceAll('_', ' '))}</span>`
+        : m.kind === 'batch'
+        ? `<b>batch</b> <span class="sub">· ${esc(prettyBatch(m.batch || ''))}</span>`
+        : `${esc(m.run_id != null ? 'run ' + m.run_id : 'line ' + m.line)} <span class="sub">· ${esc(prettyBatch(m.batch || '') || m.file)}</span>`}</div>
       ${m.comment ? `<div class="cm" title="${esc(m.comment)}">${esc(m.comment)}</div>` : ''}
       ${byName(m) ? `<div class="sub">${esc(byName(m))}</div>` : ''}</div>`).join('');
 
@@ -357,7 +380,7 @@ function renderSidebar() {
     `<div class="item ${S.batch == null ? 'on' : ''}" data-batch="" tabindex="0"><div>All batches</div><div class="sub">${S.rows.length} runs</div></div>` +
     [...groups].sort((a, b) => String(b[0]).localeCompare(String(a[0]))).map(([b, g]) => `
     <div class="item ${b === S.batch ? 'on' : ''}" data-batch="${esc(b)}" tabindex="0">
-      <div>${esc(prettyBatch(b))}</div><div class="sub">${g.n} runs · ${esc([...g.models].join(', '))}</div>
+      <div><span class="star ${S.marks[batchKey(b)]?.starred ? 'on' : ''}" data-bstar="${esc(b)}" title="star this batch">${S.marks[batchKey(b)]?.starred ? '★' : '☆'}</span> ${esc(prettyBatch(b))}</div><div class="sub">${g.n} runs · ${esc([...g.models].join(', '))}</div>
       ${g.note ? `<div class="bnote" title="${esc(g.note)}">${esc(g.note)}</div>` : '<div class="bnote missing">no note</div>'}</div>`).join('');
 }
 
@@ -489,6 +512,10 @@ function loadState() {
 
 // ---------- events ----------
 document.addEventListener('click', async e => {
+  const fs = e.target.closest('[data-fstar]');
+  if (fs) { e.stopPropagation(); return toggleGroupStar(fileKey(fs.dataset.fstar), { file: fs.dataset.fstar, batch: null, kind: 'experiment' }); }
+  const bs = e.target.closest('[data-bstar]');
+  if (bs) { e.stopPropagation(); return toggleGroupStar(batchKey(bs.dataset.bstar), { file: S.file, batch: bs.dataset.bstar, kind: 'batch' }); }
   const st = e.target.closest('[data-star]');
   if (st) { e.stopPropagation(); return toggleStar(S.rows.find(r => r.line === +st.dataset.star)); }
   if (e.target.closest('#starbtn')) return toggleStar(S.rows.find(r => r.line === S.sel));
@@ -497,6 +524,8 @@ document.addEventListener('click', async e => {
   if (go) {
     const m = S.marks[go.dataset.goto]; if (!m) return;
     if (m.file !== S.file) { S.file = m.file; S.filters = {}; S.sort = null; await loadFile(); }
+    if (m.kind === 'experiment') { S.batch = null; S.sel = null; return render(); }
+    if (m.kind === 'batch') { S.batch = m.batch; S.sel = null; S.q = ''; $('#q').value = ''; return render(); }
     const row = S.rows.find(r => keyOf(S.file, r.rec, r.line) === go.dataset.goto);
     S.batch = row?.rec.batch ?? null; S.sel = row?.line ?? null; S.q = ''; $('#q').value = '';
     return render();
