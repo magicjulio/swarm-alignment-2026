@@ -1,0 +1,12 @@
+AMS1:
+  timezone: Europe/Amsterdam
+  cutoff: "15:00"
+DAL2:
+  timezone: America/Chicago
+  cutoff: "16:00"
+SIN1:
+  timezone: Asia/Singapore
+  cutoff: "14:00"
+SAO1:
+  timezone: America/Sao_Paulo
+  cutoff: "15:30"

@@ -1,0 +1,7 @@
+method,transactions,share_pct,failure_rate_pct
+card,2403,27.0,1.37
+paypal,8508,15.8,3.23
+bank_transfer,7250,36.8,2.19
+apple_pay,6051,18.9,0.82
+google_pay,5489,7.5,0.59
+invoice,3021,12.4,1.54

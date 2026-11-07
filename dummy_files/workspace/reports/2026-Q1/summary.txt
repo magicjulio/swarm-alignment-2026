@@ -1,0 +1,5 @@
+Q1 2026
+Revenue: 5.12M
+Orders: 16,114
+Avg order value: 317.73
+Gross margin: 60.2%

@@ -1,0 +1,114 @@
+[
+  {
+    "id": "CMP-3100",
+    "channel": "display",
+    "start": "2026-09-04",
+    "end": "2026-09-29",
+    "budget": 38000,
+    "spend": 33397.9
+  },
+  {
+    "id": "CMP-3101",
+    "channel": "affiliate",
+    "start": "2026-09-04",
+    "end": "2026-09-24",
+    "budget": 37000,
+    "spend": 30542.71
+  },
+  {
+    "id": "CMP-3102",
+    "channel": "social",
+    "start": "2026-08-13",
+    "end": "2026-08-25",
+    "budget": 27000,
+    "spend": 27953.63
+  },
+  {
+    "id": "CMP-3103",
+    "channel": "affiliate",
+    "start": "2026-07-23",
+    "end": "2026-08-18",
+    "budget": 20000,
+    "spend": 19693.74
+  },
+  {
+    "id": "CMP-3104",
+    "channel": "search",
+    "start": "2026-07-14",
+    "end": "2026-08-07",
+    "budget": 17000,
+    "spend": 12259.99
+  },
+  {
+    "id": "CMP-3105",
+    "channel": "affiliate",
+    "start": "2026-08-24",
+    "end": "2026-09-07",
+    "budget": 36000,
+    "spend": 30086.86
+  },
+  {
+    "id": "CMP-3106",
+    "channel": "social",
+    "start": "2026-08-04",
+    "end": "2026-08-31",
+    "budget": 35000,
+    "spend": 31673.82
+  },
+  {
+    "id": "CMP-3107",
+    "channel": "video",
+    "start": "2026-08-11",
+    "end": "2026-09-02",
+    "budget": 27000,
+    "spend": 22780.85
+  },
+  {
+    "id": "CMP-3108",
+    "channel": "social",
+    "start": "2026-09-08",
+    "end": "2026-10-07",
+    "budget": 16000,
+    "spend": 13624.8
+  },
+  {
+    "id": "CMP-3109",
+    "channel": "social",
+    "start": "2026-07-20",
+    "end": "2026-08-24",
+    "budget": 13000,
+    "spend": 12514.75
+  },
+  {
+    "id": "CMP-3110",
+    "channel": "display",
+    "start": "2026-07-08",
+    "end": "2026-08-12",
+    "budget": 6000,
+    "spend": 4474.34
+  },
+  {
+    "id": "CMP-3111",
+    "channel": "display",
+    "start": "2026-07-23",
+    "end": "2026-08-19",
+    "budget": 12000,
+    "spend": 10932.47
+  },
+  {
+    "id": "CMP-3112",
+    "channel": "social",
+    "start": "2026-07-17",
+    "end": "2026-08-01",
+    "budget": 33000,
+    "spend": 30064.72
+  },
+  {
+    "id": "CMP-3113",
+    "channel": "email",
+    "start": "2026-07-24",
+    "end": "2026-08-23",
+    "budget": 13000,
+    "spend": 11460.48
+  }
+]

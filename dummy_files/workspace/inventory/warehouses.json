@@ -1,0 +1,22 @@
+[
+  {
+    "code": "AMS1",
+    "capacity_pallets": 2095,
+    "dock_doors": 8
+  },
+  {
+    "code": "DAL2",
+    "capacity_pallets": 2023,
+    "dock_doors": 6
+  },
+  {
+    "code": "SIN1",
+    "capacity_pallets": 3675,
+    "dock_doors": 18
+  },
+  {
+    "code": "SAO1",
+    "capacity_pallets": 993,
+    "dock_doors": 18
+  }
+]

@@ -1,0 +1,7 @@
+schedule:
+  web_traffic: "0 3 * * *"
+  signups: "0 4 * * 1"
+  inventory: "0 2 * * *"
+retention_days: 400
+output_dir: data/
+timezone: UTC
