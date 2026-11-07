@@ -1,0 +1,560 @@
+<title>Swarm Alignment Run Logs</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<style>
+  /* Three-pane reader: experiments + batches | filterable run table | transcript. Stacks on phones. */
+  :root {
+    --bg: #f6f7f8; --panel: #ffffff; --line: #e1e4e8; --text: #1b1e22; --muted: #6c727a;
+    --accent: #2f5fd0; --accent-bg: #e8eefb; --bad: #c43d2f; --bad-bg: #fbecea; --good: #2c7a4b;
+    --star: #c98f00; --star-bg: #fff4cc; --star-fg: #7a5600; --hl-bg: #ffe066; --hl-fg: #1b1e22; --on-bad: #ffffff;
+    --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #141618; --panel: #1b1e21; --line: #2e3237; --text: #e6e8eb; --muted: #949aa2;
+      --accent: #7ea2f2; --accent-bg: #1f2a44; --bad: #f08273; --bad-bg: #3a1f1b; --good: #6cc392;
+      --star: #f0c040; --star-bg: #3a3218; --star-fg: #f0d68a; --hl-bg: #8a6d00; --hl-fg: #ffffff; --on-bad: #1b1e22;
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #141618; --panel: #1b1e21; --line: #2e3237; --text: #e6e8eb; --muted: #949aa2;
+    --accent: #7ea2f2; --accent-bg: #1f2a44; --bad: #f08273; --bad-bg: #3a1f1b; --good: #6cc392;
+    --star: #f0c040; --star-bg: #3a3218; --star-fg: #f0d68a; --hl-bg: #8a6d00; --hl-fg: #ffffff; --on-bad: #1b1e22;
+    color-scheme: dark;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+         font: 13px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  #app { display: grid; grid-template-columns: 250px minmax(0, 1fr) minmax(0, 1.1fr); height: 100%;
+         padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+         background: var(--panel); }
+  aside, main, section { overflow: auto; border-right: 1px solid var(--line); min-width: 0; }
+  section { border-right: 0; }
+  aside { background: var(--panel); padding: 12px 0; }
+  h1 { font-size: 14px; margin: 2px 14px 2px; font-weight: 650; text-wrap: balance; }
+  h2 { font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted);
+       margin: 14px 14px 6px; font-weight: 600; }
+  .item { padding: 6px 14px; cursor: pointer; border-left: 3px solid transparent; }
+  .item:hover { background: var(--bg); }
+  .item.on { border-left-color: var(--accent); background: var(--accent-bg); }
+  .item .sub { color: var(--muted); font-size: 11px; }
+  .item .nm { font-family: var(--mono); font-size: 12px; word-break: break-all; }
+  #live { margin: 0 14px; font-size: 11px; color: var(--muted); }
+  #sync { margin: 4px 14px 0; font-size: 11px; color: var(--muted); }
+  #sync.warn { color: var(--bad); }
+
+  main { display: flex; flex-direction: column; background: var(--bg); }
+  .bar { padding: 10px 12px; border-bottom: 1px solid var(--line); background: var(--panel);
+         display: flex; flex-wrap: wrap; gap: 6px; align-items: center; position: sticky; top: 0; z-index: 2; }
+  #q { flex: 1 1 220px; min-width: 0; padding: 6px 9px; border: 1px solid var(--line); border-radius: 6px;
+       background: var(--bg); color: var(--text); font: inherit; }
+  .chip { border: 1px solid var(--line); border-radius: 999px; padding: 3px 9px; cursor: pointer;
+          background: var(--bg); user-select: none; font-size: 12px; white-space: nowrap; }
+  .chip.t { background: var(--accent-bg); border-color: var(--accent); color: var(--accent); }
+  .chip.f { background: var(--bad-bg); border-color: var(--bad); color: var(--bad); }
+  select { font: inherit; font-size: 12px; padding: 3px 5px; border: 1px solid var(--line);
+           border-radius: 6px; background: var(--bg); color: var(--text); max-width: 100%; }
+  #note { padding: 9px 12px; border-bottom: 1px solid var(--line); background: var(--accent-bg);
+          font-size: 12.5px; white-space: pre-wrap; }
+  #note:empty { display: none; }
+  #note .lbl { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--accent); margin-right: 6px; }
+  .item .bnote { font-size: 11px; color: var(--text); opacity: .8; margin-top: 2px;
+                 display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .item .bnote.missing { color: var(--bad); opacity: 1; }
+  #stats { padding: 8px 12px; border-bottom: 1px solid var(--line); color: var(--muted); font-size: 12px;
+           display: flex; flex-wrap: wrap; gap: 4px 16px; background: var(--panel); }
+  #stats b { color: var(--text); font-variant-numeric: tabular-nums; }
+  table { border-collapse: collapse; width: 100%; font-size: 12px; }
+  th { position: sticky; top: 0; background: var(--panel); text-align: left; font-weight: 600;
+       color: var(--muted); padding: 6px 8px; border-bottom: 1px solid var(--line); cursor: pointer; white-space: nowrap; }
+  td { padding: 5px 8px; border-bottom: 1px solid var(--line); vertical-align: top;
+       max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+       font-variant-numeric: tabular-nums; }
+  tr.r { cursor: pointer; }
+  tr.r:hover td { background: var(--panel); }
+  tr.r.on td { background: var(--accent-bg); }
+  .yes { color: var(--accent); font-weight: 600; }
+  .no { color: var(--muted); }
+  .err { color: var(--bad); font-weight: 600; }
+  #tablewrap { overflow: auto; flex: 1; }
+  .empty { padding: 40px; color: var(--muted); text-align: center; }
+
+  section { padding: 14px 18px 60px; background: var(--panel); }
+  .loc { font-family: var(--mono); font-size: 11px; color: var(--muted); }
+  .kv { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 3px 14px; margin: 10px 0 16px; font-size: 12px; }
+  .kv .k { color: var(--muted); }
+  .kv .v { font-family: var(--mono); white-space: pre-wrap; word-break: break-word; }
+  .step { border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; margin: 8px 0; }
+  .step.flag { border-color: var(--bad); background: var(--bad-bg); }
+  .sh { font-weight: 600; font-size: 12px; margin-bottom: 4px; display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+  .tag { font-size: 10px; font-weight: 600; padding: 1px 6px; border-radius: 4px; background: var(--accent-bg); color: var(--accent); }
+  .tag.bad { background: var(--bad); color: var(--on-bad); }
+  .pre { white-space: pre-wrap; word-break: break-word; }
+  details.reason { margin: 4px 0; }
+  details.reason summary { cursor: pointer; color: var(--muted); font-size: 11px; }
+  details.reason .pre { color: var(--muted); font-style: italic; padding: 4px 0 4px 10px; border-left: 2px solid var(--line); }
+  .call { font-family: var(--mono); font-size: 12px; margin: 5px 0; }
+  .fn { color: var(--accent); font-weight: 600; }
+  .res { color: var(--muted); padding-left: 14px; }
+  .msg { margin-top: 6px; padding: 6px 8px; background: var(--bg); border-radius: 6px; }
+  .role { font-size: 11px; font-weight: 600; color: var(--muted); text-transform: uppercase; }
+  .json { font-family: var(--mono); font-size: 11.5px; white-space: pre-wrap; word-break: break-word;
+          background: var(--bg); padding: 10px; border-radius: 6px; }
+  mark { background: var(--hl-bg); color: var(--hl-fg); border-radius: 2px; }
+  button { font: inherit; font-size: 12px; padding: 3px 9px; border: 1px solid var(--line);
+           border-radius: 6px; background: var(--bg); color: var(--text); cursor: pointer; }
+  button:focus-visible, .chip:focus-visible, select:focus-visible, #q:focus-visible, #cmt:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+  .hint { color: var(--muted); font-size: 11px; margin: 14px; }
+  .star { cursor: pointer; color: var(--muted); font-size: 14px; line-height: 1; user-select: none; }
+  .star.on { color: var(--star); }
+  td.st { width: 22px; padding-right: 0; }
+  #starbtn { font-size: 13px; }
+  #starbtn.on { background: var(--star-bg); border-color: var(--star); color: var(--star-fg); }
+  #cmt { width: 100%; min-height: 54px; margin: 8px 0 4px; padding: 7px 9px; font: inherit; font-size: 12.5px;
+         border: 1px solid var(--line); border-radius: 6px; background: var(--bg); color: var(--text); resize: vertical; }
+  #cmt.has { border-color: var(--star); }
+  #cmt:disabled { opacity: .6; }
+  .cmtstate { font-size: 10.5px; color: var(--muted); min-height: 14px; }
+  .item .cm { font-size: 11px; color: var(--text); opacity: .85; margin-top: 2px; font-style: italic;
+              display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  kbd { font-family: var(--mono); font-size: 10px; border: 1px solid var(--line); border-radius: 3px; padding: 0 3px; }
+  .dhead { display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; }
+
+  @media (max-width: 900px) {
+    #app { display: block; height: auto; }
+    aside, main, section { border-right: 0; border-bottom: 1px solid var(--line); overflow: visible; }
+    aside { max-height: 45vh; overflow: auto; }
+    #tablewrap { max-height: 60vh; }
+    .bar { position: static; }
+  }
+</style>
+
+<div id="app">
+  <aside>
+    <h1>Swarm alignment runs</h1>
+    <div id="live">loading logs…</div>
+    <div id="sync"></div>
+    <h2>Experiments</h2><div id="files"></div>
+    <h2 id="sh">★ Starred and commented</h2><div id="starred"></div>
+    <h2 id="bh">Batches</h2><div id="batches"></div>
+    <div class="hint"><kbd>j</kbd>/<kbd>k</kbd> next/prev run · <kbd>s</kbd> star · <kbd>c</kbd> comment · <kbd>/</kbd> search · <kbd>Esc</kbd> clear</div>
+  </aside>
+  <main>
+    <div class="bar"><input id="q" placeholder="Search everything (reasoning, tool calls, answers…)" aria-label="Search runs"><span id="filters"></span></div>
+    <div id="note"></div>
+    <div id="stats"></div>
+    <div id="tablewrap"><div id="table"></div></div>
+  </main>
+  <section id="detail"><div class="empty">Select a run</div></section>
+</div>
+<script>
+const $ = s => document.querySelector(s);
+const esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const reEsc = s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+// <name>_steps tags are red (and outline the step) only when the name sounds like a problem
+const BAD = /forbid|violat|error|fail|leak|unsafe|bad|harm|attack/i;
+const BIG = new Set(['steps', 'messages', 'note']);   // rendered specially, never as columns / filters
+
+let S = { files: [], file: null, rows: [], fields: {}, batch: null, cache: {},
+          filters: {}, q: '', sel: null, sort: null, raw: false, marks: {}, starOnly: false,
+          db: null, user: null, me: null, names: {} };
+
+// ---------- stars / comments: shared between viewers in the artifact's database ----------
+function keyOf(file, rec, line) {
+  const id = rec.run_id ?? rec.id;
+  return `${file}|${rec.batch ?? ''}|${id != null ? 'run:' + id : 'line:' + line}`;
+}
+// doc ids allow letters, digits and _ - . : @ + only; escape everything else as ~hh
+const docId = k => k.replace(/[^A-Za-z0-9_.\-:@]/g, c => '~' + c.charCodeAt(0).toString(16).padStart(2, '0'));
+const markOf = r => S.marks[keyOf(S.file, r.rec, r.line)];
+const canWrite = () => !!S.db;
+
+function stamp() {
+  const d = new Date(), p = n => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
+}
+async function saveMark(row, patch) {
+  if (!canWrite() || !row) return;
+  const key = keyOf(S.file, row.rec, row.line), cur = S.marks[key] || {};
+  const m = { key, file: S.file, batch: row.rec.batch ?? null, run_id: row.rec.run_id ?? row.rec.id ?? null, line: row.line,
+              starred: !!cur.starred, comment: cur.comment || '', ...patch };
+  m.comment = (m.comment || '').trim();
+  const ref = S.db.collection('marks').doc(docId(key));
+  try {
+    if (!m.starred && !m.comment) { delete S.marks[key]; await ref.delete(); }
+    else {
+      m.updated = stamp(); if (S.me) m.by = S.me;
+      S.marks[key] = m; await ref.set(m);
+    }
+    setSync('');
+  } catch (e) {
+    setSync(e?.code === 'permission_denied' || e?.code === 'not_granted'
+      ? 'You can read stars and comments but not change them. Ask the owner for edit access.'
+      : 'Could not save: ' + (e?.message || e?.code || 'unknown error'), true);
+  }
+}
+async function toggleStar(row) {
+  if (!row || !canWrite()) return;
+  await saveMark(row, { starred: !markOf(row)?.starred });
+  renderSidebar(); renderFilters(); renderTable(); renderDetail();
+}
+function setSync(t, warn) { $('#sync').textContent = t; $('#sync').classList.toggle('warn', !!warn); }
+
+async function resolveNames() {
+  if (!S.user) return;
+  const ids = [...new Set(Object.values(S.marks).map(m => m.by).filter(Boolean))].filter(id => !(id in S.names));
+  if (!ids.length) return;
+  try {
+    const ps = await S.user.profiles(ids);
+    for (const id of ids) S.names[id] = ps?.[id]?.name || '';
+    renderSidebar(); renderDetail();
+  } catch {}
+}
+const byName = m => m.by ? (m.by === S.me ? 'you' : (S.names[m.by] || 'a teammate')) : '';
+
+async function startMarks() {
+  if (!window.claude?.use) { setSync('Stars and comments are unavailable in this view.'); return; }
+  const [db, user] = await Promise.all([claude.use('db'), claude.use('user')]);
+  S.user = user;
+  if (user) { try { S.me = await user.id(); } catch {} }
+  if (!db) { setSync('Sign in to claude.ai to see and add stars and comments.'); return; }
+  S.db = db;
+  setSync('loading comments…');
+  const timer = setTimeout(() => setSync('Comments can’t be reached yet. Still trying.', true), 10000);
+  db.collection('marks').onSnapshot(snap => {
+    if (!snap.metadata.fromCache) { clearTimeout(timer); if (/loading|reached/.test($('#sync').textContent)) setSync(''); }
+    const next = {};
+    for (const d of snap.docs) { const m = d.data(); if (m?.key) next[m.key] = m; }
+    S.marks = next;
+    renderSidebar(); renderFilters(); renderTable(); renderDetail();
+    resolveNames();
+  }, e => { clearTimeout(timer); setSync('Comments stopped syncing (' + (e?.code || 'error') + '). Reload the page to retry.', true); });
+}
+
+// ---------- helpers ----------
+function hl(s) {               // escape + highlight the search query
+  s = String(s ?? '');
+  if (!S.q) return esc(s);
+  let out = '', last = 0;
+  for (const m of s.matchAll(new RegExp(reEsc(S.q), 'gi'))) {
+    out += esc(s.slice(last, m.index)) + '<mark>' + esc(m[0]) + '</mark>';
+    last = m.index + m[0].length;
+  }
+  return out + esc(s.slice(last));
+}
+function wilson(x, n, z = 1.96) {
+  if (!n) return [0, 0];
+  const p = x / n, d = 1 + z*z/n, c = (p + z*z/(2*n)) / d, h = z * Math.sqrt(p*(1-p)/n + z*z/(4*n*n)) / d;
+  return [Math.max(0, c - h), Math.min(1, c + h)];
+}
+const pct = x => (100 * x).toFixed(0) + '%';
+const when = t => new Date(t * 1000).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+function prettyBatch(b) {     // 20261106-122853[_model_tag] -> Nov 6, 12:28:53 · model tag
+  const m = /^(\d{4})(\d\d)(\d\d)-(\d\d)(\d\d)(\d\d)(?:_(.*))?$/.exec(b || '');
+  if (!m) return b;
+  const d = new Date(+m[1], m[2]-1, +m[3]);
+  return `${d.toLocaleDateString(undefined, {month: 'short', day: 'numeric'})}, ${m[4]}:${m[5]}:${m[6]}${m[7] ? ' · ' + m[7].replaceAll('_', ' ') : ''}`;
+}
+
+// ---------- field detection ----------
+function analyze(rows) {
+  const f = {};
+  for (const { rec } of rows) for (const [k, v] of Object.entries(rec)) {
+    const e = f[k] ??= { t: new Set(), vals: new Map(), maxLen: 0, order: Object.keys(f).length };
+    const t = v === null ? 'null' : Array.isArray(v) ? 'arr' : typeof v;
+    e.t.add(t);
+    if (t === 'string') { e.maxLen = Math.max(e.maxLen, v.length); if (e.vals.size <= 30 || e.vals.has(v)) e.vals.set(v, (e.vals.get(v) || 0) + 1); }
+    if (t === 'boolean') e.vals.set(v, (e.vals.get(v) || 0) + 1);
+  }
+  for (const [k, e] of Object.entries(f)) {
+    const t = new Set(e.t); t.delete('null');
+    const only = x => t.size === 1 && t.has(x);
+    e.kind = BIG.has(k) ? 'big'
+      : only('boolean') ? 'bool' : only('number') ? 'num' : only('arr') ? 'arr'
+      : only('string') ? (e.vals.size <= 20 && e.maxLen <= 60 && e.vals.size < rows.length ? 'cat' : 'text')
+      : t.size === 0 ? 'null' : 'other';
+  }
+  return f;
+}
+
+// ---------- data loading (static snapshot published next to this page) ----------
+async function loadFiles() {
+  const r = await fetch('logview_manifest.json').then(r => r.json());
+  S.files = r.files;
+  $('#live').textContent = `Snapshot from ${when(r.snapshot)}`;
+  if (!S.file || !S.files.some(f => f.name === S.file)) S.file = S.files.slice().sort((a, b) => b.mtime - a.mtime)[0]?.name ?? null;
+  renderSidebar();
+  if (S.file) await loadFile();
+}
+async function loadFile() {
+  const name = S.file;
+  if (!S.cache[name]) {
+    $('#table').innerHTML = '<div class="empty">Loading runs…</div>';
+    try {
+      const text = await fetch(name).then(r => { if (!r.ok) throw new Error(r.status); return r.text(); });
+      const rows = [];
+      text.split('\n').forEach((line, i) => {
+        if (!line.trim()) return;
+        let rec;
+        try { rec = JSON.parse(line); } catch (e) { rec = { _parse_error: String(e.message), _raw: line.slice(0, 5000) }; }
+        if (!rec || typeof rec !== 'object' || Array.isArray(rec)) rec = { value: rec };
+        rows.push({ line: i + 1, rec, blob: line.toLowerCase() });
+      });
+      S.cache[name] = { rows, fields: analyze(rows) };
+    } catch (e) {
+      S.cache[name] = { rows: [], fields: {}, error: true };
+    }
+  }
+  if (name !== S.file) return;
+  ({ rows: S.rows, fields: S.fields } = S.cache[name]);
+  for (const k of Object.keys(S.filters)) if (!S.fields[k]) delete S.filters[k];
+  if (S.batch && !S.rows.some(r => r.rec.batch === S.batch)) S.batch = null;
+  render();
+}
+
+// ---------- filtering ----------
+function inBatch() { return S.rows.filter(r => S.batch == null || r.rec.batch === S.batch); }
+function visible() {
+  const q = S.q.toLowerCase();
+  let v = inBatch().filter(r => (!S.starOnly || markOf(r)?.starred) && Object.entries(S.filters).every(([k, val]) => r.rec[k] === val)
+                             && (!q || r.blob.includes(q)));
+  if (S.sort) {
+    const { k, dir } = S.sort, key = r => k === '#' ? r.line : Array.isArray(r.rec[k]) ? r.rec[k].length : r.rec[k];
+    v = v.slice().sort((a, b) => { const x = key(a), y = key(b);
+      return (x === y ? 0 : x == null ? 1 : y == null ? -1 : x < y ? -1 : 1) * dir; });
+  }
+  return v;
+}
+
+// ---------- rendering ----------
+function render() { renderSidebar(); renderFilters(); renderTable(); renderDetail(); saveState(); }
+
+function renderSidebar() {
+  $('#files').innerHTML = S.files.length ? S.files.map(f => `
+    <div class="item ${f.name === S.file ? 'on' : ''}" data-file="${esc(f.name)}" tabindex="0">
+      <div class="nm">${esc(f.name.replace(/\.jsonl$/, '').replaceAll('_', ' '))}</div>
+      <div class="sub">${f.lines} runs · last run ${when(f.mtime)}</div></div>`).join('')
+    : '<div class="hint">No logs in this snapshot.</div>';
+
+  const stars = Object.entries(S.marks).filter(([, m]) => m.starred || m.comment)
+    .sort((a, b) => String(b[1].updated).localeCompare(String(a[1].updated)));
+  $('#sh').style.display = stars.length ? '' : 'none';
+  $('#starred').innerHTML = stars.map(([k, m]) => `
+    <div class="item ${S.file === m.file && S.rows.find(r => r.line === S.sel && keyOf(S.file, r.rec, r.line) === k) ? 'on' : ''}" data-goto="${esc(k)}" tabindex="0">
+      <div><span class="star ${m.starred ? 'on' : ''}">${m.starred ? '★' : '✎'}</span> ${esc(m.run_id != null ? 'run ' + m.run_id : 'line ' + m.line)}
+        <span class="sub">· ${esc(prettyBatch(m.batch || '') || m.file)}</span></div>
+      ${m.comment ? `<div class="cm" title="${esc(m.comment)}">${esc(m.comment)}</div>` : ''}
+      ${byName(m) ? `<div class="sub">${esc(byName(m))}</div>` : ''}</div>`).join('');
+
+  const groups = new Map();
+  for (const r of S.rows) if ('batch' in r.rec) {
+    const g = groups.get(r.rec.batch) ?? { n: 0, models: new Set(), note: null };
+    g.n++; if (r.rec.model) g.models.add(r.rec.model); g.note ??= r.rec.note ?? null; groups.set(r.rec.batch, g);
+  }
+  $('#bh').style.display = groups.size ? '' : 'none';
+  $('#batches').innerHTML = !groups.size ? '' :
+    `<div class="item ${S.batch == null ? 'on' : ''}" data-batch="" tabindex="0"><div>All batches</div><div class="sub">${S.rows.length} runs</div></div>` +
+    [...groups].sort((a, b) => String(b[0]).localeCompare(String(a[0]))).map(([b, g]) => `
+    <div class="item ${b === S.batch ? 'on' : ''}" data-batch="${esc(b)}" tabindex="0">
+      <div>${esc(prettyBatch(b))}</div><div class="sub">${g.n} runs · ${esc([...g.models].join(', '))}</div>
+      ${g.note ? `<div class="bnote" title="${esc(g.note)}">${esc(g.note)}</div>` : '<div class="bnote missing">no note</div>'}</div>`).join('');
+}
+
+function renderFilters() {
+  const nStar = S.rows.filter(r => markOf(r)?.starred).length;
+  const parts = [`<span class="chip ${S.starOnly ? 't' : ''}" id="staronly" tabindex="0" title="show only starred runs">★ starred${nStar ? ' ' + nStar : ''}</span>`];
+  for (const [k, e] of Object.entries(S.fields)) {
+    if (e.kind === 'bool') {
+      const v = S.filters[k], cls = v === true ? 't' : v === false ? 'f' : '';
+      parts.push(`<span class="chip ${cls}" data-bool="${esc(k)}" tabindex="0" title="click: any → true → false">${v === false ? 'not ' : ''}${esc(k)}</span>`);
+    } else if (e.kind === 'cat' && k !== 'batch') {
+      const opts = [...e.vals.keys()].sort();
+      parts.push(`<select data-cat="${esc(k)}" aria-label="${esc(k)}"><option value="">${esc(k)}: any</option>${opts.map(o =>
+        `<option ${S.filters[k] === o ? 'selected' : ''} value="${esc(o)}">${esc(k)}: ${esc(o)}</option>`).join('')}</select>`);
+    }
+  }
+  if (Object.keys(S.filters).length || S.q || S.starOnly) parts.push('<button id="clear">Clear filters</button>');
+  $('#filters').innerHTML = parts.join(' ');
+}
+
+function columns() {
+  return Object.entries(S.fields)
+    .filter(([k, e]) => ['bool', 'num', 'cat', 'text', 'arr', 'null'].includes(e.kind) && !(k === 'batch' && S.batch != null))
+    .sort((a, b) => a[1].order - b[1].order).map(([k]) => k);
+}
+function cell(v) {
+  if (v === true) return '<span class="yes">✓</span>';
+  if (v === false) return '<span class="no">·</span>';
+  if (v == null) return '<span class="no">–</span>';
+  if (Array.isArray(v)) return v.length ? v.length + (v.length && typeof v[0] !== 'object' && v.length <= 4 ? ` <span class="no">[${esc(v.join(','))}]</span>` : '') : '<span class="no">0</span>';
+  if (typeof v === 'number') return Number.isInteger(v) ? v : v.toPrecision(3);
+  return esc(String(v).slice(0, 120));
+}
+
+function renderTable() {
+  const rows = visible(), base = inBatch(), cols = columns();
+  const st = [`<span><b>${rows.length}</b> / ${base.length} runs shown</span>`];
+  for (const [k, e] of Object.entries(S.fields)) {
+    if (e.kind === 'bool') {
+      const x = rows.filter(r => r.rec[k] === true).length, n = rows.length, [lo, hi] = wilson(x, n);
+      st.push(`<span>${esc(k)}: <b>${x}/${n}</b>${n ? ` (${pct(x/n)}, 95% CI ${pct(lo)}–${pct(hi)})` : ''}</span>`);
+    } else if (e.kind === 'num' && /cost|token/i.test(k)) {
+      const sum = rows.reduce((a, r) => a + (r.rec[k] || 0), 0);
+      st.push(`<span>Σ ${esc(k)}: <b>${sum.toPrecision(3)}</b></span>`);
+    }
+  }
+  const errs = rows.filter(r => r.rec._parse_error).length;
+  if (errs) st.push(`<span class="err">${errs} unreadable lines</span>`);
+  $('#stats').innerHTML = st.join('');
+  const notes = new Set(base.map(r => r.rec.note).filter(Boolean));
+  $('#note').innerHTML = notes.size === 1 ? `<span class="lbl">note</span>${esc([...notes][0])}`
+    : notes.size > 1 ? `<span class="lbl">notes</span>${notes.size} different notes, select a batch to see one` : '';
+
+  if (!S.file) { $('#table').innerHTML = '<div class="empty">No logs yet.</div>'; return; }
+  if (S.cache[S.file]?.error) { $('#table').innerHTML = '<div class="empty">This log file could not be loaded. Reload the page to try again.</div>'; return; }
+  if (!S.cache[S.file]) return;
+  if (!rows.length) { $('#table').innerHTML = '<div class="empty">No runs match these filters.</div>'; return; }
+  const arrow = k => S.sort?.k === k ? (S.sort.dir > 0 ? ' ▲' : ' ▼') : '';
+  $('#table').innerHTML = `<table><thead><tr><th></th><th data-sort="#">#${arrow('#')}</th>${cols.map(c =>
+      `<th data-sort="${esc(c)}">${esc(c)}${arrow(c)}</th>`).join('')}</tr></thead><tbody>${rows.map(r => `
+    <tr class="r ${r.line === S.sel ? 'on' : ''}" data-line="${r.line}">
+      <td class="st"><span class="star ${markOf(r)?.starred ? 'on' : ''}" data-star="${r.line}" title="${esc(markOf(r)?.comment || 'star (s)')}">${markOf(r)?.starred ? '★' : markOf(r)?.comment ? '✎' : '☆'}</span></td>
+      <td class="no">${r.line}</td>${cols.map(c => `<td title="${esc(typeof r.rec[c] === 'string' ? r.rec[c].slice(0, 500) : '')}">${cell(r.rec[c])}</td>`).join('')}</tr>`).join('')}
+    </tbody></table>`;
+  $('tr.r.on')?.scrollIntoView({ block: 'nearest' });
+}
+
+function flagsFor(rec) {        // keys like forbidden_read_steps: [3] -> highlight step 3
+  const m = new Map();
+  for (const [k, v] of Object.entries(rec))
+    if (k.endsWith('_steps') && Array.isArray(v))
+      for (const s of v) if (typeof s === 'number') m.set(s, [...(m.get(s) || []), k.replace(/_steps$/, '')]);
+  return m;
+}
+function renderSteps(steps, flags) {
+  return steps.map((s, i) => {
+    if (typeof s !== 'object' || s === null) return `<div class="step pre">${hl(JSON.stringify(s))}</div>`;
+    const n = s.step ?? i, fl = flags.get(n) || [], isBad = f => BAD.test(f);
+    let h = `<div class="step ${fl.some(isBad) ? 'flag' : ''}"><div class="sh">step ${esc(n)} ${fl.map(f => `<span class="tag ${isBad(f) ? 'bad' : ''}">${esc(f)}</span>`).join('')}</div>`;
+    for (const t of s.reasoning || []) h += `<details class="reason" open><summary>thinking</summary><div class="pre">${hl(t)}</div></details>`;
+    for (const c of s.calls || []) {
+      const args = typeof c.args === 'string' ? c.args : JSON.stringify(c.args);
+      h += `<div class="call"><span class="fn">${hl(c.name)}</span>(${hl(args)})<div class="res pre">→ ${hl(c.result)}</div></div>`;
+    }
+    if (s.text) h += `<div class="msg pre">${hl(s.text)}</div>`;
+    const extra = Object.fromEntries(Object.entries(s).filter(([k]) => !['step', 'reasoning', 'calls', 'text'].includes(k)));
+    if (Object.keys(extra).length) h += `<div class="json">${hl(JSON.stringify(extra, null, 2))}</div>`;
+    return h + '</div>';
+  }).join('');
+}
+function renderMessages(msgs) {
+  return msgs.map(m => `<div class="step"><div class="role">${esc(m.role ?? m.type ?? '?')}</div>
+    <div class="pre">${hl(typeof m.content === 'string' ? m.content : JSON.stringify(m.content ?? m, null, 2))}</div></div>`).join('');
+}
+
+function renderDetail() {
+  if (document.activeElement?.id === 'cmt') return;     // don't clobber a comment being typed
+  const row = S.rows.find(r => r.line === S.sel);
+  if (!row) { $('#detail').innerHTML = '<div class="empty">Select a run to read its transcript</div>'; return; }
+  const rec = row.rec, mk = markOf(row) || {}, w = canWrite();
+  let h = `<div class="dhead">
+    <span class="loc">${esc(S.file)} · line ${row.line}</span>
+    <span><button id="starbtn" class="${mk.starred ? 'on' : ''}" ${w ? '' : 'disabled'} title="star this run (s)">${mk.starred ? '★ Starred' : '☆ Star'}</button> <button id="raw">${S.raw ? 'Show transcript' : 'Show raw JSON'}</button></span></div>`;
+  h += `<textarea id="cmt" class="${mk.comment ? 'has' : ''}" ${w ? '' : 'disabled'} placeholder="${w ? 'Comment: why is this run interesting? Saved automatically and visible to the team.' : 'Sign in to comment.'}">${esc(mk.comment || '')}</textarea>
+    <div class="cmtstate" id="cmtstate">${mk.updated ? 'saved ' + esc(mk.updated) + (byName(mk) ? ' by ' + esc(byName(mk)) : '') : ''}</div>`;
+  if (S.raw) { $('#detail').innerHTML = h + `<div class="json" style="margin-top:10px">${hl(JSON.stringify(rec, null, 2))}</div>`; return; }
+
+  const scal = Object.entries(rec).filter(([k, v]) => v === null || typeof v !== 'object');
+  h += `<div class="kv">${scal.map(([k, v]) => `<div class="k">${esc(k)}</div><div class="v ${v === true ? 'yes' : ''}">${hl(v === null ? '–' : v)}</div>`).join('')}</div>`;
+  if (Array.isArray(rec.steps)) h += renderSteps(rec.steps, flagsFor(rec));
+  if (Array.isArray(rec.messages)) h += renderMessages(rec.messages);
+  for (const [k, v] of Object.entries(rec))
+    if (v && typeof v === 'object' && !BIG.has(k))
+      h += `<details ${Array.isArray(v) && v.length <= 5 ? 'open' : ''}><summary class="role" style="cursor:pointer;margin-top:10px">${esc(k)}</summary><div class="json">${hl(JSON.stringify(v, null, 2))}</div></details>`;
+  $('#detail').innerHTML = h;
+  $('#detail').querySelector('mark')?.scrollIntoView({ block: 'center' });
+}
+
+// ---------- remembered place (this browser only) ----------
+function saveState() {
+  try { localStorage.setItem('logview', JSON.stringify({ f: S.file, b: S.batch, l: S.sel, fl: S.filters, so: S.starOnly })); } catch {}
+}
+function loadState() {
+  try {
+    const st = JSON.parse(localStorage.getItem('logview') || 'null');
+    if (st) Object.assign(S, { file: st.f ?? null, batch: st.b ?? null, sel: st.l ?? null, filters: st.fl || {}, starOnly: !!st.so });
+  } catch {}
+}
+
+// ---------- events ----------
+document.addEventListener('click', async e => {
+  const st = e.target.closest('[data-star]');
+  if (st) { e.stopPropagation(); return toggleStar(S.rows.find(r => r.line === +st.dataset.star)); }
+  if (e.target.closest('#starbtn')) return toggleStar(S.rows.find(r => r.line === S.sel));
+  if (e.target.closest('#staronly')) { S.starOnly = !S.starOnly; return render(); }
+  const go = e.target.closest('[data-goto]');
+  if (go) {
+    const m = S.marks[go.dataset.goto]; if (!m) return;
+    if (m.file !== S.file) { S.file = m.file; S.filters = {}; S.sort = null; await loadFile(); }
+    const row = S.rows.find(r => keyOf(S.file, r.rec, r.line) === go.dataset.goto);
+    S.batch = row?.rec.batch ?? null; S.sel = row?.line ?? null; S.q = ''; $('#q').value = '';
+    return render();
+  }
+  const t = e.target.closest('[data-file],[data-batch],[data-bool],tr.r,th[data-sort],#clear,#raw');
+  if (!t) return;
+  if (t.dataset.file != null) { S.file = t.dataset.file; S.batch = null; S.sel = null; S.filters = {}; S.sort = null; render(); await loadFile(); return; }
+  if (t.dataset.batch != null) { S.batch = t.dataset.batch || null; S.sel = null; }
+  else if (t.dataset.bool) { const k = t.dataset.bool, v = S.filters[k];
+    if (v === undefined) S.filters[k] = true; else if (v === true) S.filters[k] = false; else delete S.filters[k]; }
+  else if (t.dataset.line) { S.sel = +t.dataset.line; }
+  else if (t.dataset.sort) { const k = t.dataset.sort; S.sort = S.sort?.k !== k ? { k, dir: 1 } : S.sort.dir > 0 ? { k, dir: -1 } : null; }
+  else if (t.id === 'clear') { S.filters = {}; S.q = ''; S.starOnly = false; $('#q').value = ''; }
+  else if (t.id === 'raw') { S.raw = !S.raw; }
+  render();
+});
+document.addEventListener('change', e => {
+  const k = e.target.dataset.cat; if (!k) return;
+  if (e.target.value === '') delete S.filters[k]; else S.filters[k] = e.target.value;
+  render();
+});
+let ct;
+document.addEventListener('input', e => {
+  if (e.target.id !== 'cmt') return;
+  const row = S.rows.find(r => r.line === S.sel), val = e.target.value;
+  $('#cmtstate').textContent = 'saving…';
+  clearTimeout(ct);
+  ct = setTimeout(async () => {
+    await saveMark(row, { comment: val });
+    e.target.classList.toggle('has', !!val.trim());
+    const m = markOf(row); $('#cmtstate').textContent = m ? 'saved ' + m.updated : 'comment removed';
+    renderSidebar(); renderTable();
+  }, 700);
+});
+document.addEventListener('focusout', e => { if (e.target.id === 'cmt') setTimeout(renderDetail, 900); });
+let qt;
+$('#q').addEventListener('input', e => { clearTimeout(qt); qt = setTimeout(() => { S.q = e.target.value; render(); }, 150); });
+document.addEventListener('keydown', e => {
+  if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT' || e.target.tagName === 'TEXTAREA') {
+    if (e.key === 'Escape') { e.target.blur(); if (e.target.id === 'q') { e.target.value = ''; S.q = ''; render(); } }
+    return;
+  }
+  if (e.key === 'Enter' && e.target.closest?.('.item,.chip')) { e.preventDefault(); e.target.click(); return; }
+  if (e.key === '/') { e.preventDefault(); $('#q').focus(); return; }
+  if (e.key === 's' && !e.metaKey && !e.ctrlKey) { toggleStar(S.rows.find(r => r.line === S.sel)); return; }
+  if (e.key === 'c' && !e.metaKey && !e.ctrlKey && $('#cmt') && !$('#cmt').disabled) { e.preventDefault(); $('#cmt').focus(); return; }
+  if (e.key === 'Escape') { S.filters = {}; S.q = ''; $('#q').value = ''; render(); return; }
+  const dir = { j: 1, ArrowDown: 1, k: -1, ArrowUp: -1 }[e.key];
+  if (!dir) return;
+  e.preventDefault();
+  const rows = visible(), i = rows.findIndex(r => r.line === S.sel);
+  const next = rows[i < 0 ? 0 : Math.min(rows.length - 1, Math.max(0, i + dir))];
+  if (next) { S.sel = next.line; renderTable(); renderDetail(); saveState(); }
+});
+
+// ---------- go ----------
+loadState();
+render();
+loadFiles().catch(() => { $('#live').textContent = 'The log snapshot could not be loaded. Reload the page to try again.'; });
+startMarks();
+</script>
