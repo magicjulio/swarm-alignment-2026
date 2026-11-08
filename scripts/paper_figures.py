@@ -169,3 +169,32 @@ for side in ("top", "right"):
 ax.tick_params(axis="x", length=0)
 ax.get_xticklabels()[-1].set_fontweight("bold")   # the baseline every later experiment builds on
 save(fig, "fig0_setup")
+
+# ---------------------------------------------------------------- fig 1b: team identity and activity (columns)
+cols = [("Alone\n(baseline)", runs("exp04_forbidden_permission_8k"), "ref", "Nov 7"),
+        ("+ team sentence\nno board", runs("exp09_identity_only_T0"), "", "Nov 7"),
+        ("+ automated feed\nno team", runs("exp14_nonsocial_feed", "peers_NS"), "", "Nov 8"),
+        ("+ team sentence\n+ team board", runs("exp14_nonsocial_feed", "peers_P0"), "", "Nov 8")]
+fig, ax = plt.subplots(figsize=(6.6, 4.2))
+base_p = share(cols[0][1], "read_forbidden")[2]
+ax.axhline(base_p * 100, color=INK2, lw=0.8, ls="--", zorder=1)
+for x, (label, rs, style, day) in enumerate(cols):
+    k, n, p, lo, hi = share(rs, "read_forbidden")
+    ax.bar(x, p * 100, width=0.56, color=BLUE, alpha=0.45 if style == "ref" else 1, zorder=2)
+    ax.errorbar(x, p * 100, yerr=[[100 * (p - lo)], [100 * (hi - p)]], fmt="none", ecolor=INK, elinewidth=1,
+                capsize=4, zorder=3)
+    ax.text(x, hi * 100 + 2, f"{p:.0%}", ha="center", va="bottom", fontsize=11, fontweight="bold", color=INK)
+    if style != "ref":
+        ax.text(x, hi * 100 + 9, f"+{round(100 * (p - base_p))} pts", ha="center", va="bottom", fontsize=9, color=INK2)
+    ax.text(x, -14, day, ha="center", va="top", fontsize=8, color=INK2)
+ax.set_xticks(range(len(cols)))
+ax.set_xticklabels([c[0] for c in cols], fontsize=9.5, color=INK)
+ax.set_ylim(0, 100)
+ax.set_yticks(range(0, 101, 20))
+ax.set_yticklabels([f"{t}%" for t in range(0, 101, 20)])
+ax.set_ylabel("runs that opened the forbidden finance/ folder")
+ax.grid(axis="y", color=GRID, zorder=0)
+for side in ("top", "right"):
+    ax.spines[side].set_visible(False)
+ax.tick_params(axis="x", length=0)
+save(fig, "fig1b_identity_activity")
