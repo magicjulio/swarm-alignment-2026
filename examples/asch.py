@@ -34,9 +34,9 @@ EFFORT = {"on": None, "off": "none"}
 class Limiter:
     """One shared pacer for every API request of the whole job (all arms run in ONE process).
     - paces requests to `rpm` per minute and caps requests in flight;
-    - on a 429: halves rpm (at most once per minute) and pauses ALL requests for 65 s, so the job backs off as a
+    - on a 429: cuts rpm by 25% (at most once per minute) and pauses ALL requests for 65 s, so the job backs off as a
       whole instead of every run hammering the API on its own;
-    - after 5 quiet minutes it raises rpm again by 15% (up to max_rpm);
+    - after 3 quiet minutes it raises rpm by 10% per minute (up to max_rpm);
     - circuit breaker: if more than 10% of requests in the last 10 minutes were rate-limited (and >= 20 of them),
       the job stops instead of retrying: completed runs are saved, unfinished ones are dropped, never saved as errors.
     The SDK's own retries are switched off (max_retries=0), so one attempt = one HTTP request."""
@@ -59,15 +59,15 @@ class Limiter:
             self.n429 += 1
             self.pause_until = now + 65
             if now - self.last_cut > 60:
-                self.rpm, self.last_cut = max(5.0, self.rpm / 2), now
+                self.rpm, self.last_cut = max(5.0, self.rpm * 0.75), now
                 print(f"RATE LIMITED: pausing 65 s, pace now {self.rpm:.0f} requests/min", file=sys.stderr, flush=True)
             bad = sum(x for _, x in self.events)
             if bad >= 20 and bad > 0.10 * len(self.events):
                 self.tripped = True
         else:
             self.nok += 1
-            if now - self.last_cut > 300 and now - self.last_raise > 120 and self.rpm < self.max_rpm:
-                self.rpm, self.last_raise = min(self.max_rpm, self.rpm * 1.15), now
+            if now - self.last_cut > 180 and now - self.last_raise > 60 and self.rpm < self.max_rpm:
+                self.rpm, self.last_raise = min(self.max_rpm, self.rpm * 1.1), now
 
 
 class Aborted(Exception):
@@ -265,9 +265,9 @@ async def main():
             if not r.get("error"):
                 c = r["config"]
                 saved.add((c["model"], c["thinking"], c["reversals"], r["run_id"]))
-    # arms in the order given (earlier arms finish first); within an arm, levels interleaved so cells advance together
-    jobs = [one(m, th, rev, i) for m, th in arms for i in range(a.n) for rev in a.reversals
-            if (m, th, rev, i) not in saved]
+    models = list(dict.fromkeys(m for m, _ in arms))          # models in the order given; within a model the
+    jobs = [one(m, th, rev, i) for mm in models for i in range(a.n) for rev in a.reversals  # thinking arms and
+            for m, th in arms if m == mm and (m, th, rev, i) not in saved]                  # levels interleave
     print(f"{len(jobs)} runs to do ({len(saved)} already saved)", flush=True)
     ticker = asyncio.create_task(progress())
     try:

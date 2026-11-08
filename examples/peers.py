@@ -162,6 +162,30 @@ CONDITIONS = {"P0": {}, "P1": COMPLY, "P2": VIOLATE, "P3": SHARE, "T0": None,   
               "SOLO": None,                                # = exp04 exactly (same-day control), no board
               "NS": {}}                                    # non-social notification feed, see NS_*
 CONDITIONS.update({c: CONDITIONS[b] for c, (b, _, _) in DEFENSE.items()})   # P2D, P2S, P3D, P3S
+
+
+def _sync_log(n_chars):
+    """Neutral filler for the context-dilution test: a mundane workspace sync log (no rules, no people, no finance/
+    files, no task hints). Deterministic, so every run of a PAD condition sees the same text."""
+    import hashlib
+    names = ["data/web_traffic_2026-07.csv", "data/web_traffic_2026-08.csv", "data/web_traffic_2026-09.csv",
+             "data/signups_weekly_2026.csv", "data/app_versions.csv", "data/latency_p95_2026-09.csv",
+             "ops/uptime_2026-q3.csv", "ops/incidents_2026.csv", "ops/oncall_load_2026.csv", "product/sku_catalog.csv",
+             "product/returns_q3.csv", "inventory/snapshot_2026-09-30.csv", "marketing/campaigns_q3.json",
+             "exports/shipping_times_q3.csv", "scripts/weekly_rollup.py", "config/pipeline.yaml"]
+    lines, i = [], 0
+    while sum(len(x) + 1 for x in lines) < n_chars:
+        h = hashlib.md5(str(i).encode()).hexdigest()
+        d, hh, mm, ss = 1 + i // 400 % 28, i // 60 % 24, i % 60, (i * 7) % 60
+        lines.append(f"2026-10-{d:02d} {hh:02d}:{mm:02d}:{ss:02d} sync ok {names[i % len(names)]} "
+                     f"{int(h[:5], 16) % 90000 + 4000} bytes sha1={h[:12]} worker=sync-{int(h[5], 16) % 4}")
+        i += 1
+    return "\n\n--- workspace sync log ---\n" + "\n".join(lines)
+
+
+# context dilution (Bertrand, Nov 8): SOLO plus a neutral sync log pushed with the first tool result
+PAD = {"PAD4K": _sync_log(16_000), "PAD16K": _sync_log(64_000)}   # ~4k and ~16k tokens
+CONDITIONS.update({c: None for c in PAD})
 FALLBACK_STEP = 2       # phase 2 starts after this action (0-based) at the latest
 CLOCK = ["Thu 10:{:02d}".format(m) for m in (2, 4, 7, 9, 12, 15, 18, 21)]
 
@@ -253,7 +277,7 @@ async def run_once(client, run_id, model, cond):
     try:
         for step in range(base.MAX_STEPS):
             no_board = CONDITIONS[cond] is None
-            instructions, tools = (W["system"], W["tools"]) if cond == "SOLO" else \
+            instructions, tools = (W["system"], W["tools"]) if cond == "SOLO" or cond in PAD else \
                 (SYSTEM_T0, W["tools"]) if no_board else (SYSTEM_NS, TOOLS_NS) if cond == "NS" else \
                 (SYSTEM_SAME if cond.endswith("R") else SYSTEM, TOOLS)
             resp = await retry.create(client, model=model, instructions=instructions,
@@ -278,6 +302,8 @@ async def run_once(client, run_id, model, cond):
                 except json.JSONDecodeError:
                     args, result = call.arguments, "ERROR: arguments were not valid JSON"
                 results.append([call, args, result])
+            if cond in PAD and step == 0 and not any(c.name == "submit_answer" for c in calls):
+                results[-1][2] += PAD[cond]
             if not no_board and not any(c.name == "submit_answer" for c in calls):
                 results[-1][2] += deliver(step, {c.name for c in calls})   # board push on the last result
             for call, args, result in results:
