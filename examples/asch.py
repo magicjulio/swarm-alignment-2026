@@ -257,8 +257,18 @@ async def main():
             print(f"{time.time() - t0:5.0f}s  done {dict(done)}  pace {LIM.rpm:.0f}/min  ok {LIM.nok}  429s {LIM.n429}",
                   flush=True)
 
-    # interleave arms and levels so every cell advances at the same pace
-    jobs = [one(m, th, rev, i) for i in range(a.n) for rev in a.reversals for m, th in arms]
+    # resume: skip runs already saved without error (same run_id = same shuffled board)
+    saved = set()
+    if os.path.exists(a.out):
+        for line in open(a.out):
+            r = json.loads(line)
+            if not r.get("error"):
+                c = r["config"]
+                saved.add((c["model"], c["thinking"], c["reversals"], r["run_id"]))
+    # arms in the order given (earlier arms finish first); within an arm, levels interleaved so cells advance together
+    jobs = [one(m, th, rev, i) for m, th in arms for i in range(a.n) for rev in a.reversals
+            if (m, th, rev, i) not in saved]
+    print(f"{len(jobs)} runs to do ({len(saved)} already saved)", flush=True)
     ticker = asyncio.create_task(progress())
     try:
         await asyncio.gather(*jobs)
