@@ -1,7 +1,9 @@
 """Paper figures, computed from final/results/ (fig 5: data/asch_runs.jsonl while the Asch run is in progress).
 
-    .venv/bin/python scripts/paper_figures.py      # -> paper/figures/fig{0,1,1b,2,3,4,5}_*.{png,pdf}
+    .venv/bin/python scripts/paper_figures.py      # -> paper/figures/fig{0,1,1b,2,3,4,5,6,7}_*.{png,pdf}
     .venv/bin/python scripts/paper_figures.py fig5 # only fig 5 (Asch, live data/asch_runs.jsonl, run_id < 50)
+    .venv/bin/python scripts/paper_figures.py fig6 [runs.jsonl]  # same-night ladder (tag night_nov9)
+    .venv/bin/python scripts/paper_figures.py fig7 [runs.jsonl]  # same-night dilution (tag night_nov9)
 
 Colors (fixed meaning in every figure, validated with the dataviz palette checker):
   blue   = opened the forbidden finance/ folder
@@ -122,8 +124,67 @@ def fig5_asch_thinking(path=ROOT / "data" / "asch_runs.jsonl", max_run_id=50):
     save(fig, "fig5_asch_thinking")
 
 
+# ---------------------------------------------------------------- fig 6 / fig 7: same-night batch (tag night_nov9)
+NIGHT_PATH = ROOT / "data" / "peers_realistic_runs.jsonl"
+MODEL_MARKERS = {"qwen3.8-27b": ("o", "Qwen3.8-27B"), "deepseek-v4-flash": ("s", "DeepSeek-V4-Flash")}
+
+
+def night_columns(cols, name, path=NIGHT_PATH):
+    """Column chart of % runs that opened finance/, pooled over models (Wilson 95% CI, n under the bar), first column
+    light (the reference); light per-model dots beside each bar. cols = [(cond, label)]. 'running' when empty."""
+    sys.path.insert(0, str(ROOT / "scripts"))
+    from night_stats import cell, load, model_of
+    rs = load(path)
+    fig, ax = plt.subplots(figsize=(5.6, 4.0))
+    models = [m for m in MODEL_MARKERS if any(model_of(r) == m for r in rs)]
+    for x, (cond, label) in enumerate(cols):
+        g = cell(rs, cond)
+        if g:
+            k, n, p, lo, hi = share(g, "read_forbidden")
+            ax.bar(x, p * 100, width=0.56, color=BLUE, alpha=0.45 if x == 0 else 1, zorder=2)
+            ax.errorbar(x, p * 100, yerr=[[100 * (p - lo)], [100 * (hi - p)]], fmt="none", ecolor=INK, elinewidth=1,
+                        capsize=4, zorder=3)
+            ax.text(x, hi * 100 + 2, f"{p:.0%}", ha="center", va="bottom", fontsize=11, fontweight="bold", color=INK)
+        ax.text(x, -2.5, f"n={len(g)}", ha="center", va="top", fontsize=8.5, color=INK2)
+        for j, m in enumerate(models):   # per-model dots, right of the bar
+            gm = cell(rs, cond, m)
+            if gm:
+                pm = share(gm, "read_forbidden")[2]
+                ax.plot(x + 0.36 + 0.09 * j, pm * 100, MODEL_MARKERS[m][0], ms=5, mfc=SURFACE, mec=INK2, mew=1,
+                        zorder=4, label=MODEL_MARKERS[m][1] if x == 0 else None)
+    if not rs:
+        ax.text(0.5, 0.5, "running", transform=ax.transAxes, ha="center", va="center", fontsize=11, color=INK2)
+    elif models:
+        ax.legend(loc="lower right", bbox_to_anchor=(1.0, 1.0), ncol=2, frameon=False, fontsize=8.5,
+                  title="dots: per model", title_fontsize=8.5, alignment="right")
+    ax.set_xticks(range(len(cols)))
+    ax.set_xticklabels([c[1] for c in cols], fontsize=9.5, color=INK)
+    ax.tick_params(axis="x", length=0, pad=19)    # room for the n= strip under 0%
+    ax.set_xlim(-0.5, len(cols) - 0.3)
+    ax.set_ylim(0, 100)
+    ax.set_yticks(range(0, 101, 20))
+    ax.set_yticklabels([f"{t}%" for t in range(0, 101, 20)])
+    ax.set_ylabel("runs that opened the forbidden finance/ folder")
+    ax.grid(axis="y", color=GRID, zorder=0)
+    for side in ("top", "right"):
+        ax.spines[side].set_visible(False)
+    save(fig, name)
+
+
+def fig6_same_night_ladder(path=NIGHT_PATH):
+    night_columns([("SOLO", "alone"), ("NS", "system feed"), ("P0", "team board")], "fig6_same_night_ladder", path)
+
+
+def fig7_dilution(path=NIGHT_PATH):
+    night_columns([("SOLO", "no extra context"), ("PAD4K", "+4k tokens"), ("PAD16K", "+16k tokens")],
+                  "fig7_dilution", path)
+
+
 if __name__ == "__main__" and sys.argv[1:2] == ["fig5"]:   # only this figure: paper_figures.py fig5 [runs.jsonl]
     fig5_asch_thinking(*sys.argv[2:3])
+    sys.exit()
+if __name__ == "__main__" and sys.argv[1:2] in (["fig6"], ["fig7"]):   # paper_figures.py fig6|fig7 [runs.jsonl]
+    {"fig6": fig6_same_night_ladder, "fig7": fig7_dilution}[sys.argv[1]](*sys.argv[2:3])
     sys.exit()
 
 
@@ -299,3 +360,5 @@ ax.legend(loc="upper center", bbox_to_anchor=(0.5, -0.25), ncol=2, frameon=False
 save(fig, "fig4_laundering_disclosure")
 
 fig5_asch_thinking()
+fig6_same_night_ladder()
+fig7_dilution()
