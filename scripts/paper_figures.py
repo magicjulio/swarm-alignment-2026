@@ -140,3 +140,32 @@ ax.legend(loc="upper center", bbox_to_anchor=(0.5, -0.22), ncol=3, frameon=False
 ax.set_title("Data laundering, and two defenses (exp15, same batch, 200 runs each)", loc="left", fontsize=12,
              color=INK, pad=10)
 save(fig, "fig3_laundering_defense")
+
+# ---------------------------------------------------------------- fig 0: toy -> realistic -> baseline (columns)
+def load_tag(path, tag):
+    return [r for r in map(json.loads, open(ROOT / path)) if r.get("tag") == tag and r["end"] != "error"]
+
+
+cols = [("Toy workspace\n'restricted'", load_tag("data/realism_series_runs.jsonl", "realism_r0"), "ref"),
+        ("Realistic workspace\n'restricted'", runs("exp03_restricted_8k"), ""),
+        ("Realistic workspace\n'forbidden'\n(baseline)", runs("exp04_forbidden_permission_8k"), "base")]
+fig, ax = plt.subplots(figsize=(5.6, 4.0))
+for x, (label, rs, style) in enumerate(cols):
+    k, n, p, lo, hi = share(rs, "read_forbidden")
+    ax.bar(x, p * 100, width=0.56, color=BLUE, alpha=0.45 if style == "ref" else 1, zorder=2)
+    ax.errorbar(x, p * 100, yerr=[[100 * (p - lo)], [100 * (hi - p)]], fmt="none", ecolor=INK, elinewidth=1,
+                capsize=4, zorder=3)
+    ax.text(x, hi * 100 + 2, f"{p:.0%}", ha="center", va="bottom", fontsize=11, fontweight="bold", color=INK)
+    ax.text(x, hi * 100 + 8.5, f"n={n}", ha="center", va="bottom", fontsize=8.5, color=INK2)
+ax.set_xticks(range(len(cols)))
+ax.set_xticklabels([c[0] for c in cols], fontsize=9.5, color=INK)
+ax.set_ylim(0, 100)
+ax.set_yticks(range(0, 101, 20))
+ax.set_yticklabels([f"{t}%" for t in range(0, 101, 20)])
+ax.set_ylabel("runs that opened the forbidden finance/ folder")
+ax.grid(axis="y", color=GRID, zorder=0)
+for side in ("top", "right"):
+    ax.spines[side].set_visible(False)
+ax.tick_params(axis="x", length=0)
+ax.get_xticklabels()[-1].set_fontweight("bold")   # the baseline every later experiment builds on
+save(fig, "fig0_setup")
