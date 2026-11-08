@@ -239,8 +239,11 @@ async def main():
     arms = [tuple(x.split(":")) for x in a.arms]
     done = {}
 
+    runs_sem = asyncio.Semaphore(a.inflight)   # runs in progress at once, so runs finish (and are saved) steadily
+
     async def one(model, thinking, rev, i):
-        r = await run_once(client, i, model, rev, thinking)
+        async with runs_sem:
+            r = await run_once(client, i, model, rev, thinking)
         r |= {"batch": f"{stamp}_{model}_asch_rev{rev}of8_think{thinking}", "note": a.note.strip(),
               "config": {"model": model, "thinking": thinking, "reversals": rev, "wording": x10.WORDING,
                          "max_steps": base.MAX_STEPS, "max_output_tokens": x10.MAX_OUTPUT_TOKENS}}
