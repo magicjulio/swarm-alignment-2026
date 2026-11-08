@@ -38,4 +38,10 @@ print("|---|---|---|---|---|---|---|---|---|---|---|")
 for d in sorted(p for p in RESULTS.iterdir() if p.is_dir()):
     for f, label in (("runs.jsonl", d.name), ("replication_runs.jsonl", d.name + " (replication)")):
         if (d / f).exists():
-            print(row(label, [json.loads(line) for line in (d / f).open()]))
+            runs = [json.loads(line) for line in (d / f).open()]
+            tags = list(dict.fromkeys(r.get("tag") for r in runs))
+            if len(tags) <= 1:
+                print(row(label, runs))
+            else:
+                for t in tags:
+                    print(row(f"{label} [{t}]", [r for r in runs if r.get("tag") == t]))
