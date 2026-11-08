@@ -1,6 +1,7 @@
-"""Paper figures, computed only from final/results/ (no exploratory data).
+"""Paper figures, computed from final/results/ (fig 5: data/asch_runs.jsonl while the Asch run is in progress).
 
-    .venv/bin/python scripts/paper_figures.py      # -> paper/figures/fig{1,2,3}_*.{png,pdf}
+    .venv/bin/python scripts/paper_figures.py      # -> paper/figures/fig{0,1,1b,2,3,4,5}_*.{png,pdf}
+    .venv/bin/python scripts/paper_figures.py fig5 # only fig 5 (Asch, live data/asch_runs.jsonl, run_id < 50)
 
 Colors (fixed meaning in every figure, validated with the dataviz palette checker):
   blue   = opened the forbidden finance/ folder
@@ -10,6 +11,7 @@ Colors (fixed meaning in every figure, validated with the dataviz palette checke
 import json
 import math
 import re
+import sys
 from pathlib import Path
 
 import matplotlib
@@ -67,6 +69,62 @@ def save(fig, name):
         fig.savefig(OUT / f"{name}.{ext}", dpi=200, bbox_inches="tight")
     plt.close(fig)
     print("wrote", OUT / f"{name}.png")
+
+
+# ---------------------------------------------------------------- fig 5: Asch dose-response, thinking on vs off
+ASCH_MODELS = [("qwen3.8-27b", "Qwen3.8-27B"), ("deepseek-v4-flash", "DeepSeek-V4-Flash")]
+ASCH_LEVELS = [0, 1, 2, 4, 8]
+
+
+def fig5_asch_thinking(path=ROOT / "data" / "asch_runs.jsonl", max_run_id=50):
+    """x = teammates (of 8) who posted that they broke the rule, y = % runs that opened finance/ (Wilson 95% CI);
+    one panel per model, thinking on (solid) vs off (light, dashed). Live data: data/asch_runs.jsonl, run_id < 50."""
+    sys.path.insert(0, str(ROOT / "scripts"))
+    from asch_stats import load
+    rs = load(path, max_run_id)
+    fig, axes = plt.subplots(1, len(ASCH_MODELS), figsize=(9.6, 3.9), sharey=True, gridspec_kw={"wspace": 0.08})
+    series = [("on", "thinking on", BLUE, 1.0, "-", "o", 0.12), ("off", "thinking off", BLUE, 0.45, "--", "o", -0.12)]
+    for ax, (model, title) in zip(axes, ASCH_MODELS):
+        ax.set_title(title, loc="left", fontsize=10.5, color=INK)
+        mr = [r for r in rs if r["model"] == model]
+        for th, label, col, alpha, ls, mk, dx in series:
+            pts = []
+            for i, lev in enumerate(ASCH_LEVELS):
+                g = [r for r in mr if r["thinking"] == th and r["reversals"] == lev]
+                if g:
+                    k, n, p, lo, hi = share(g, "read_forbidden")
+                    pts.append((i + dx, p, lo, hi, n))
+            if not pts:
+                continue
+            xs, ps = [q[0] for q in pts], [100 * q[1] for q in pts]
+            ax.plot(xs, ps, ls=ls, color=col, alpha=alpha, lw=1.8, zorder=3, label=label)
+            ax.errorbar(xs, ps, yerr=[[100 * (q[1] - q[2]) for q in pts], [100 * (q[3] - q[1]) for q in pts]],
+                        fmt=mk, ms=6, color=col, alpha=alpha, ecolor=col, elinewidth=1, capsize=3, zorder=4,
+                        mfc=col if th == "on" else SURFACE, mew=1.5)
+            for x, p, lo, hi, n in pts:   # n per point in a strip under 0%, below its own marker
+                ax.text(x, -4.5, str(n), ha="center", va="center", fontsize=7, color=col, alpha=max(alpha, 0.7))
+        if not mr:
+            ax.text(0.5, 0.5, "running", transform=ax.transAxes, ha="center", va="center", fontsize=11, color=INK2)
+        ax.set_xticks(range(len(ASCH_LEVELS)))
+        ax.set_xticklabels([str(lev) for lev in ASCH_LEVELS])
+        ax.set_xlim(-0.5, len(ASCH_LEVELS) - 0.5)
+        ax.set_ylim(-9, 100)
+        ax.set_yticks(range(0, 101, 20))
+        ax.set_yticklabels([f"{t}%" for t in range(0, 101, 20)])
+        ax.grid(axis="y", color=GRID, zorder=0)
+        for side in ("top", "right"):
+            ax.spines[side].set_visible(False)
+        ax.tick_params(axis="x", length=0)
+    fig.supxlabel("teammates (of 8) who posted that they opened finance/   (small numbers: runs per point)",
+                  fontsize=10, color=INK2, y=-0.01)
+    axes[0].set_ylabel("runs that opened the forbidden finance/ folder")
+    axes[0].legend(loc="upper left", frameon=False, fontsize=9)
+    save(fig, "fig5_asch_thinking")
+
+
+if __name__ == "__main__" and sys.argv[1:2] == ["fig5"]:   # only this figure: paper_figures.py fig5 [runs.jsonl]
+    fig5_asch_thinking(*sys.argv[2:3])
+    sys.exit()
 
 
 # ---------------------------------------------------------------- fig 1: wording + context, no peer misbehaves
@@ -239,3 +297,5 @@ for side in ("top", "right"):
     ax.spines[side].set_visible(False)
 ax.legend(loc="upper center", bbox_to_anchor=(0.5, -0.25), ncol=2, frameon=False, fontsize=9)
 save(fig, "fig4_laundering_disclosure")
+
+fig5_asch_thinking()
