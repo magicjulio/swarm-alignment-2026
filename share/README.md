@@ -2,7 +2,7 @@
 
 | file | what it is |
 |---|---|
-| `fig1_single_agent.png` | overview of all single-agent experiments, with their IDs |
+| `fig1_single_agent.png` | overview of the central single-agent experiments (toy → realistic → baseline), with their IDs |
 | `fig2_team_peers.png` | overview of all team / peer experiments, with their IDs |
 | `board_posts.md` | **every text the agent saw** in the team experiments, word for word: system prompts, task, permission reply, board history, each condition's posts, and when they appear |
 | `runs.csv` | **one row per run** (1,595 runs: exp04 baseline + T0, P0–P3, P0R, P2R), opens in Excel / Google Sheets |
