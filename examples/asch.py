@@ -32,8 +32,9 @@ EFFORT = {"on": None, "off": "none"}
 RETRIES = {}   # error kind -> count; printed with each level's summary to spot rate limiting
 
 
-async def create(client, attempts=4, **kwargs):
-    """= retry.create (same request re-sent, backoff 3/6/12 s), but every retry is counted and logged."""
+async def create(client, attempts=8, **kwargs):
+    """Like retry.create (the same request is re-sent), but every retry is counted and logged, and a 429 rate limit
+    waits the 60 s the API asks for (+ jitter) instead of 3/6/12 s. Up to 8 attempts."""
     for i in range(attempts):
         try:
             return await client.responses.create(**kwargs)
@@ -44,7 +45,8 @@ async def create(client, attempts=4, **kwargs):
                 raise
             RETRIES[kind] = RETRIES.get(kind, 0) + 1
             print(f"retry {i + 1}: {kind}", file=sys.stderr, flush=True)
-            await asyncio.sleep(3 * 2 ** i)
+            rate_limited = getattr(e, "status_code", None) == 429 or "RateLimit" in type(e).__name__
+            await asyncio.sleep(60 + random.uniform(0, 30) if rate_limited else 3 * 2 ** min(i, 4))
 
 
 async def run_once(client, run_id, model, reversals, thinking, seed="pp42"):
@@ -172,7 +174,7 @@ async def main():
     ap.add_argument("--thinking", choices=["on", "off"], required=True)
     ap.add_argument("--reversals", nargs="+", type=int, default=[0, 1, 2, 4, 8])
     ap.add_argument("-n", type=int, default=100, help="runs per reversal level")
-    ap.add_argument("-c", "--concurrency", type=int, default=500, help="500 = every run of the arm at once")
+    ap.add_argument("-c", "--concurrency", type=int, default=100, help="parallel runs per arm (account rate limit!)")
     ap.add_argument("--note", required=True)
     ap.add_argument("--out", default=str(ROOT / "data" / "asch_runs.jsonl"))
     a = ap.parse_args()
