@@ -2,6 +2,8 @@
 
 | file | what it is |
 |---|---|
+| **website** | https://claude.ai/artifact/3P6Tm9sQYq7kyWdR55cGCh: overview, the texts the agent saw, and every run browsable with filters (built by `scripts/share_site.py`, page `share/site/index.html`) |
+| `README.pdf`, `board_posts.pdf` | PDF versions of this file and of `board_posts.md` (`scripts/share_pdfs.sh`) |
 | `fig1_single_agent.png` | overview of the central single-agent experiments (toy → realistic → baseline), with their IDs |
 | `fig2_team_peers.png` | overview of all team / peer experiments, with their IDs |
 | `board_posts.md` | **every text the agent saw** in the team experiments, word for word: system prompts, task, permission reply, board history, each condition's posts, and when they appear |

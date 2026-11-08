@@ -1,6 +1,6 @@
 # What the agent saw in the team experiments (verbatim)
 
-Generated from `examples/peers.py` by `scripts/share_board_posts.py`. Everything below is exactly the text the model received. Same in every team condition unless stated.
+Everything below is exactly the text the model received.
 
 ## 1. System prompt
 

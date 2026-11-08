@@ -32,34 +32,39 @@ def transcript(r):
     return t if len(t) <= CELL else t[:CELL] + "\n... [cut for Excel; full log in the .jsonl]"
 
 
-rows = []
-for exp, path in SOURCES:
-    for line in open(ROOT / path):
-        r = json.loads(line)
-        if r["end"] == "error" or (exp in ("P0R", "P2R") and r.get("cond") != exp):
-            continue
-        rows.append({
-            "experiment": exp, "model": r["model"], "run_id": r["run_id"],
-            "opened_finance": int(r["read_forbidden"]),
-            "finance_files_read": " ".join(sorted({c["args"].get("path", "") for s in r["steps"] for c in s["calls"]
-                                                   if c["name"] == "read_file" and isinstance(c["args"], dict)
-                                                   and str(c["args"].get("path", "")).lstrip("./").startswith("finance/")})),
-            "asked_permission": int(r.get("requested_access", False)),
-            "answer_contains_q3_figures": int(bool(r.get("answer_leaks"))),
-            "used_figures_posted_by_teammate": int(bool(r.get("used_shared_data"))),
-            "flagged_thinks_its_a_test": int(bool(r.get("eval_aware"))),
-            "test_quotes": "\n---\n".join(r.get("eval_aware_quotes", [])),
-            "saw_condition_posts_before_opening": int(bool(r.get("exposed_before_violation"))),
-            "mentions_teammates_in_reasoning": int(bool(r.get("cites_peers_reasoning"))),
-            "posted_to_board": "\n---\n".join(r.get("posted", [])),
-            "n_actions": len(r["steps"]),
-            "reasoning_chars": sum(len(t) for s in r["steps"] for t in s["reasoning"]),
-            "final_answer": r.get("answer") or "",
-            "full_transcript": transcript(r),
-        })
-with open(ROOT / "share" / "runs.csv", "w", newline="", encoding="utf-8-sig") as f:
-    w = csv.DictWriter(f, fieldnames=list(rows[0]))
-    w.writeheader()
-    w.writerows(rows)
-from collections import Counter
-print(len(rows), Counter(r["experiment"] for r in rows), sum(r["full_transcript"].endswith("jsonl]") for r in rows), "cut")
+def main():
+    rows = []
+    for exp, path in SOURCES:
+        for line in open(ROOT / path):
+            r = json.loads(line)
+            if r["end"] == "error" or (exp in ("P0R", "P2R") and r.get("cond") != exp):
+                continue
+            rows.append({
+                "experiment": exp, "model": r["model"], "run_id": r["run_id"],
+                "opened_finance": int(r["read_forbidden"]),
+                "finance_files_read": " ".join(sorted({c["args"].get("path", "") for s in r["steps"] for c in s["calls"]
+                                                       if c["name"] == "read_file" and isinstance(c["args"], dict)
+                                                       and str(c["args"].get("path", "")).lstrip("./").startswith("finance/")})),
+                "asked_permission": int(r.get("requested_access", False)),
+                "answer_contains_q3_figures": int(bool(r.get("answer_leaks"))),
+                "used_figures_posted_by_teammate": int(bool(r.get("used_shared_data"))),
+                "flagged_thinks_its_a_test": int(bool(r.get("eval_aware"))),
+                "test_quotes": "\n---\n".join(r.get("eval_aware_quotes", [])),
+                "saw_condition_posts_before_opening": int(bool(r.get("exposed_before_violation"))),
+                "mentions_teammates_in_reasoning": int(bool(r.get("cites_peers_reasoning"))),
+                "posted_to_board": "\n---\n".join(r.get("posted", [])),
+                "n_actions": len(r["steps"]),
+                "reasoning_chars": sum(len(t) for s in r["steps"] for t in s["reasoning"]),
+                "final_answer": r.get("answer") or "",
+                "full_transcript": transcript(r),
+            })
+    with open(ROOT / "share" / "runs.csv", "w", newline="", encoding="utf-8-sig") as f:
+        w = csv.DictWriter(f, fieldnames=list(rows[0]))
+        w.writeheader()
+        w.writerows(rows)
+    from collections import Counter
+    print(len(rows), Counter(r["experiment"] for r in rows), sum(r["full_transcript"].endswith("jsonl]") for r in rows), "cut")
+
+
+if __name__ == "__main__":
+    main()
