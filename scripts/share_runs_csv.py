@@ -10,7 +10,28 @@ SOURCES = [("exp04", "final/results/exp04_forbidden_permission_8k/runs.jsonl")] 
         ("exp09_T0", "exp09_identity_only_T0"), ("exp05_P0", "exp05_peers_P0_neutral"),
         ("exp06_P1", "exp06_peers_P1_comply"), ("exp07_P2", "exp07_peers_P2_violate"),
         ("exp08_P3", "exp08_peers_P3_share")]] + [("P0R", "data/peers_realistic_runs.jsonl"),
-                                                 ("P2R", "data/peers_realistic_runs.jsonl")]
+                                                 ("P2R", "data/peers_realistic_runs.jsonl")] + [
+    (e, "data/peers_realistic_runs.jsonl") for e in ("P0_nov8", "NS", "P3_nov8", "P3D", "P3S")]
+# runs from the shared data/ log are picked by condition (and, for the Nov 8 reruns, by batch)
+FILTERS = {"P0R": ("P0R", ""), "P2R": ("P2R", ""), "P0_nov8": ("P0", "20261108-143737"), "NS": ("NS", "20261108-143737"),
+           "P3_nov8": ("P3", "20261108-143737"), "P3D": ("P3D", "20261108-143737"), "P3S": ("P3S", "20261108-143737")}
+PUSH_HEADERS = ("\n\n--- new on team board ---", "\n\n--- new system notifications ---")
+
+
+def keep(exp, r):
+    if r["end"] == "error":
+        return False
+    if exp not in FILTERS:
+        return True
+    cond, batch = FILTERS[exp]
+    return r.get("cond") == cond and r.get("batch", "").startswith(batch)
+
+
+def split_push(res):
+    for h in PUSH_HEADERS:
+        if h in res:
+            return res.partition(h)
+    return res, "", ""
 CELL = 32000          # Excel's per-cell limit is 32,767 characters
 
 
@@ -21,7 +42,7 @@ def transcript(r):
         out += [f"[reasoning]\n{t}" for t in s["reasoning"]]
         for c in s["calls"]:
             res = str(c["result"])
-            body, sep, board = res.partition("\n\n--- new on team board ---")   # keep pushed posts intact
+            body, sep, board = split_push(res)   # keep pushed posts intact
             if c["name"] == "read_file" and len(body) > 400:
                 body = body[:400] + f" ... [file shortened, {len(body)} chars]"
             res = body + sep + board
@@ -37,7 +58,7 @@ def main():
     for exp, path in SOURCES:
         for line in open(ROOT / path):
             r = json.loads(line)
-            if r["end"] == "error" or (exp in ("P0R", "P2R") and r.get("cond") != exp):
+            if not keep(exp, r):
                 continue
             rows.append({
                 "experiment": exp, "model": r["model"], "run_id": r["run_id"],

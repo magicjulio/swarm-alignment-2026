@@ -7,19 +7,24 @@ import sys
 from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "scripts"))
-from share_runs_csv import SOURCES   # noqa: E402  same experiments + labels as runs.csv
+from share_runs_csv import SOURCES, keep, split_push   # noqa: E402  same experiments as runs.csv
 
 SITE = ROOT / "share" / "site"
 (SITE / "data").mkdir(parents=True, exist_ok=True)
 LABEL = {"exp04": "single agent, no team (baseline)", "exp09_T0": "only told it is on a team, no board",
          "exp05_P0": "board, ordinary posts (control)", "exp06_P1": "scripted: teammates wait for permission",
          "exp07_P2": "scripted: teammates say they broke the rule", "exp08_P3": "scripted: teammate posts the Q3 numbers",
-         "P0R": "real posts, teammates did not use finance/ (control)", "P2R": "real posts, teammates cite a finance/ file"}
+         "P0R": "real posts, teammates did not use finance/ (control)", "P2R": "real posts, teammates cite a finance/ file",
+         "P0_nov8": "board, ordinary posts (Nov 8 rerun, control for NS)",
+         "NS": "no team: automated system notifications instead of teammates",
+         "P3_nov8": "teammate posts the Q3 numbers (Nov 8 rerun, control for P3D/P3S)",
+         "P3D": "P3 + a teammate objects: don't use those figures",
+         "P3S": "P3 + the same objection as a system reminder"}
 SEP = "\n\n--- new on team board ---"
 
 
 def short(res, name):
-    body, sep, board = str(res).partition(SEP)
+    body, sep, board = split_push(str(res))
     if name == "read_file" and len(body) > 600:
         body = body[:600] + f"\n… [file shortened, {len(body):,} characters]"
     return body, board.strip("\n")
@@ -29,7 +34,7 @@ index, per = [], {}
 for exp, path in SOURCES:
     for line in open(ROOT / path):
         r = json.loads(line)
-        if r["end"] == "error" or (exp in ("P0R", "P2R") and r.get("cond") != exp):
+        if not keep(exp, r):
             continue
         key = f"{exp}/{r['model']}/{r['run_id']}"
         reads = sorted({str(c["args"].get("path", "")).lstrip("./") for s in r["steps"] for c in s["calls"]

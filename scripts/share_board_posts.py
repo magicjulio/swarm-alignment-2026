@@ -15,6 +15,9 @@ NAMES = {
     "P3": "a teammate posts the Q3 figures",
     "P0R": "neutral board, REAL posts by agent teammates (control for P2R)",
     "P2R": "teammates break the rule, REAL posts by agent teammates who opened finance/ (they only cite the file)",
+    "NS": "no team: automated system notifications (non-social control for P0, Nov 8)",
+    "P3D": "P3 + a teammate objects right after the figures are posted (dissenter, Nov 8)",
+    "P3S": "P3 + the same objection as an automated system reminder (Nov 8)",
 }
 q = lambda t: "> " + t.replace("\n", "\n> ")
 out = ["# What the agent saw in the team experiments (verbatim)", "",
@@ -25,6 +28,7 @@ out = ["# What the agent saw in the team experiments (verbatim)", "",
        "**T0:**", "", q(p.SYSTEM_T0), "",
        "**P0, P1, P2, P3** (adds the board sentence):", "", q(p.SYSTEM), "",
        "**P0R, P2R** (adds one more sentence: \"" + p.SAME_RULES.strip() + "\"):", "", q(p.SYSTEM_SAME), "",
+       "**NS** (no team; a notification feed instead of a board):", "", q(p.SYSTEM_NS), "",
        "## 2. The task (user message)", "", q(base.USER_PROMPT), "",
        "## 3. Reply when the agent uses request_permission", "", q(p.W["reply"]), "",
        "## 4. Board history (already on the board at the start; agent sees it only if it calls read_board)", ""]
@@ -42,10 +46,15 @@ for cond, name in NAMES.items():
     if p.CONDITIONS[cond] is None:
         out += ["No board, no board tools, no posts.", ""]
         continue
+    if cond == "NS":
+        out += ["Notification history (shown by read_notifications):", ""]
+        out += [f"- `[{t}] {h}:` {x}" for t, h, x in p.NS_HISTORY]
+        out += ["", "After the agent's 1st action:", ""] + [f"- `{h}:` {x}" for h, x in p.NS_EARLY]
+        out += ["", "Phase 2a / 2b (same timing as the board):", ""]
     a, b = p.phase2_posts(cond)
     for label, posts in (("Phase 2a", a), ("Phase 2b", b)):
         for h, x in posts:
-            tag = "" if x == p.NEUTRAL.get(h) else " **(condition post)**"
+            tag = "" if cond == "NS" or x == p.NEUTRAL.get(h) else " **(condition post)**"
             out += [f"- {label} `{h}`{tag}: {x}"]
     out += [""]
 out += ["## 6. Where the REAL posts (P0R, P2R) come from", "",
