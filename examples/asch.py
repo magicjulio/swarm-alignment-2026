@@ -8,12 +8,14 @@ Board texts, shuffling and timing are final/exp10_asch_split.py's (imported, byt
     (verified: 0 reasoning tokens).
 Same run_id -> same shuffled board in every arm.
 
-    .venv/bin/python examples/asch.py -m qwen3.8-27b --thinking off -n 100 --note "..."
+    .venv/bin/python examples/asch.py --arms qwen3.8-27b:on qwen3.8-27b:off -n 100 --note "..."
+All arms run in one process behind one shared rate limiter (see Limiter).
 Logs to data/asch_runs.jsonl.
 """
 import argparse
 import asyncio
 import json
+import os
 import random
 import sys
 import time
@@ -29,32 +31,74 @@ from adaption import AsyncAdaption                # noqa: E402
 load_dotenv(ROOT / ".env")
 base, W, ME = x10.base, x10.W, x10.ME
 EFFORT = {"on": None, "off": "none"}
-RETRIES = {}   # error kind -> count; printed with each level's summary to spot rate limiting
+class Limiter:
+    """One shared pacer for every API request of the whole job (all arms run in ONE process).
+    - paces requests to `rpm` per minute and caps requests in flight;
+    - on a 429: halves rpm (at most once per minute) and pauses ALL requests for 65 s, so the job backs off as a
+      whole instead of every run hammering the API on its own;
+    - after 5 quiet minutes it raises rpm again by 15% (up to max_rpm);
+    - circuit breaker: if more than 10% of requests in the last 10 minutes were rate-limited (and >= 20 of them),
+      the job stops instead of retrying: completed runs are saved, unfinished ones are dropped, never saved as errors.
+    The SDK's own retries are switched off (max_retries=0), so one attempt = one HTTP request."""
+
+    def __init__(self, rpm, max_rpm, inflight):
+        self.rpm, self.max_rpm, self.sem = rpm, max_rpm, asyncio.Semaphore(inflight)
+        self.next_t = self.pause_until = self.last_cut = self.last_raise = 0.0
+        self.lock, self.events, self.n429, self.nok, self.tripped = asyncio.Lock(), [], 0, 0, False
+
+    async def wait_turn(self):
+        async with self.lock:
+            t = max(time.monotonic(), self.next_t, self.pause_until)
+            self.next_t = t + 60 / self.rpm
+        await asyncio.sleep(max(0.0, t - time.monotonic()))
+
+    def record(self, limited):
+        now = time.monotonic()
+        self.events = [(t, x) for t, x in self.events if now - t < 600] + [(now, limited)]
+        if limited:
+            self.n429 += 1
+            self.pause_until = now + 65
+            if now - self.last_cut > 60:
+                self.rpm, self.last_cut = max(5.0, self.rpm / 2), now
+                print(f"RATE LIMITED: pausing 65 s, pace now {self.rpm:.0f} requests/min", file=sys.stderr, flush=True)
+            bad = sum(x for _, x in self.events)
+            if bad >= 20 and bad > 0.10 * len(self.events):
+                self.tripped = True
+        else:
+            self.nok += 1
+            if now - self.last_cut > 300 and now - self.last_raise > 120 and self.rpm < self.max_rpm:
+                self.rpm, self.last_raise = min(self.max_rpm, self.rpm * 1.15), now
+
+
+class Aborted(Exception):
+    pass
+
+
+LIM = None   # set in main()
 
 
 async def create(client, attempts=4, **kwargs):
-    """Like retry.create (the same request is re-sent), but every retry is counted and logged. A 429 rate limit waits
-    the 60 s the API asks for (+ jitter) and does not use up an attempt (up to 60 rate-limit waits), so rate limiting
-    only delays a run and never ends it. Other transient errors: 4 attempts, as in retry.create."""
-    i = waits = 0
-    while True:
-        try:
-            return await client.responses.create(**kwargs)
-        except Exception as e:
-            kind = f"{type(e).__name__} {getattr(e, 'status_code', '') or ''}".strip()
-            rate_limited = getattr(e, "status_code", None) == 429 or "RateLimit" in type(e).__name__
-            if rate_limited and waits < 60:
-                waits += 1
-                RETRIES[kind] = RETRIES.get(kind, 0) + 1
-                await asyncio.sleep(60 + random.uniform(0, 30))
-                continue
-            i += 1
-            if i >= attempts or not retry.transient(e):
-                RETRIES[kind + " (gave up)"] = RETRIES.get(kind + " (gave up)", 0) + 1
-                raise
-            RETRIES[kind] = RETRIES.get(kind, 0) + 1
-            print(f"retry {i}: {kind}", file=sys.stderr, flush=True)
-            await asyncio.sleep(3 * 2 ** (i - 1))
+    """One API call through the shared Limiter. 429s are re-sent after the global pause (they never end a run);
+    other transient errors get 4 attempts as in retry.create. Raises Aborted when the circuit breaker trips."""
+    i = 0
+    async with LIM.sem:
+        while True:
+            if LIM.tripped:
+                raise Aborted("rate-limit circuit breaker")
+            await LIM.wait_turn()
+            try:
+                resp = await client.responses.create(**kwargs)
+                LIM.record(False)
+                return resp
+            except Exception as e:
+                if getattr(e, "status_code", None) == 429 or "RateLimit" in type(e).__name__:
+                    LIM.record(True)
+                    continue
+                i += 1
+                if i >= attempts or not retry.transient(e):
+                    raise
+                print(f"retry {i}: {type(e).__name__}", file=sys.stderr, flush=True)
+                await asyncio.sleep(3 * 2 ** (i - 1))
 
 
 async def run_once(client, run_id, model, reversals, thinking, seed="pp42"):
@@ -154,6 +198,8 @@ async def run_once(client, run_id, model, reversals, thinking, seed="pp42"):
             if any(c.name == "submit_answer" for c in calls):
                 rec["end"] = "submitted"
                 break
+    except Aborted:
+        raise
     except Exception as e:
         rec["error"], rec["end"] = f"{type(e).__name__}: {e}", "error"
 
@@ -177,37 +223,49 @@ async def run_once(client, run_id, model, reversals, thinking, seed="pp42"):
 
 
 async def main():
+    global LIM
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("-m", "--model", required=True)
-    ap.add_argument("--thinking", choices=["on", "off"], required=True)
+    ap.add_argument("--arms", nargs="+", required=True, help="model:on|off, e.g. qwen3.8-27b:on qwen3.8-27b:off")
     ap.add_argument("--reversals", nargs="+", type=int, default=[0, 1, 2, 4, 8])
-    ap.add_argument("-n", type=int, default=100, help="runs per reversal level")
-    ap.add_argument("-c", "--concurrency", type=int, default=40, help="parallel runs per arm (account rate limit!)")
+    ap.add_argument("-n", type=int, default=100, help="runs per arm per reversal level")
+    ap.add_argument("--rpm", type=float, default=120, help="starting pace, requests per minute for the whole job")
+    ap.add_argument("--max-rpm", type=float, default=300)
+    ap.add_argument("--inflight", type=int, default=40, help="max API requests in flight for the whole job")
     ap.add_argument("--note", required=True)
     ap.add_argument("--out", default=str(ROOT / "data" / "asch_runs.jsonl"))
     a = ap.parse_args()
-    client, sem, t0 = AsyncAdaption(), asyncio.Semaphore(a.concurrency), time.time()
-    stamp = time.strftime("%Y%m%d-%H%M%S")
+    LIM = Limiter(a.rpm, a.max_rpm, a.inflight)
+    client, t0, stamp = AsyncAdaption(max_retries=0), time.time(), time.strftime("%Y%m%d-%H%M%S")
+    arms = [tuple(x.split(":")) for x in a.arms]
+    done = {}
 
-    async def guarded(i, rev):
-        async with sem:
-            r = await run_once(client, i, a.model, rev, a.thinking)
-        r |= {"batch": f"{stamp}_{a.model}_asch_rev{rev}of8_think{a.thinking}", "note": a.note.strip(),
-              "config": {"model": a.model, "thinking": a.thinking, "reversals": rev, "wording": x10.WORDING,
+    async def one(model, thinking, rev, i):
+        r = await run_once(client, i, model, rev, thinking)
+        r |= {"batch": f"{stamp}_{model}_asch_rev{rev}of8_think{thinking}", "note": a.note.strip(),
+              "config": {"model": model, "thinking": thinking, "reversals": rev, "wording": x10.WORDING,
                          "max_steps": base.MAX_STEPS, "max_output_tokens": x10.MAX_OUTPUT_TOKENS}}
         with open(a.out, "a") as f:          # saved as soon as it finishes
             f.write(json.dumps(r) + "\n")
-        return r
+        done[(model, thinking)] = done.get((model, thinking), 0) + 1
 
-    async def level(rev):
-        recs = await asyncio.gather(*(guarded(i, rev) for i in range(a.n)))
-        ok = [r for r in recs if r["end"] != "error"]
-        v = sum(r["read_forbidden"] for r in ok)
-        print(f"[{a.model} thinking {a.thinking} rev {rev}/8] {time.time() - t0:4.0f}s: opened finance/ {v}/{len(ok)}, "
-              f"eval-aware {sum(bool(r['eval_aware']) for r in ok)}, errors {len(recs) - len(ok)}, "
-              f"truncated {sum(r['truncated'] for r in ok)}, API retries so far {RETRIES or 0}", flush=True)
+    async def progress():
+        while True:
+            await asyncio.sleep(60)
+            print(f"{time.time() - t0:5.0f}s  done {dict(done)}  pace {LIM.rpm:.0f}/min  ok {LIM.nok}  429s {LIM.n429}",
+                  flush=True)
 
-    await asyncio.gather(*(level(r) for r in a.reversals))
+    # interleave arms and levels so every cell advances at the same pace
+    jobs = [one(m, th, rev, i) for i in range(a.n) for rev in a.reversals for m, th in arms]
+    ticker = asyncio.create_task(progress())
+    try:
+        await asyncio.gather(*jobs)
+    except Aborted:
+        print(f"STOPPED by the circuit breaker after {time.time() - t0:.0f}s: too many 429s. Completed runs are saved "
+              f"({sum(done.values())}); unfinished runs were dropped. Lower --rpm/--inflight.", flush=True)
+        ticker.cancel()
+        os._exit(2)
+    ticker.cancel()
+    print(f"finished in {time.time() - t0:.0f}s, {sum(done.values())} runs, 429s {LIM.n429}", flush=True)
 
 
 if __name__ == "__main__":
