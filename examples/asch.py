@@ -29,6 +29,22 @@ from adaption import AsyncAdaption                # noqa: E402
 load_dotenv(ROOT / ".env")
 base, W, ME = x10.base, x10.W, x10.ME
 EFFORT = {"on": None, "off": "none"}
+RETRIES = {}   # error kind -> count; printed with each level's summary to spot rate limiting
+
+
+async def create(client, attempts=4, **kwargs):
+    """= retry.create (same request re-sent, backoff 3/6/12 s), but every retry is counted and logged."""
+    for i in range(attempts):
+        try:
+            return await client.responses.create(**kwargs)
+        except Exception as e:
+            kind = f"{type(e).__name__} {getattr(e, 'status_code', '') or ''}".strip()
+            if i == attempts - 1 or not retry.transient(e):
+                RETRIES[kind + " (gave up)"] = RETRIES.get(kind + " (gave up)", 0) + 1
+                raise
+            RETRIES[kind] = RETRIES.get(kind, 0) + 1
+            print(f"retry {i + 1}: {kind}", file=sys.stderr, flush=True)
+            await asyncio.sleep(3 * 2 ** i)
 
 
 async def run_once(client, run_id, model, reversals, thinking, seed="pp42"):
@@ -92,7 +108,7 @@ async def run_once(client, run_id, model, reversals, thinking, seed="pp42"):
     extra = {"extra_body": {"reasoning": {"effort": EFFORT[thinking]}}} if EFFORT[thinking] else {}
     try:
         for step in range(base.MAX_STEPS):
-            resp = await retry.create(client, model=model, instructions=x10.SYSTEM, input=history, tools=x10.TOOLS,
+            resp = await create(client, model=model, instructions=x10.SYSTEM, input=history, tools=x10.TOOLS,
                                       max_output_tokens=x10.MAX_OUTPUT_TOKENS, timeout=180, **extra)
             rec["cost"] += resp.usage.cost or 0.0
             try:
@@ -156,7 +172,7 @@ async def main():
     ap.add_argument("--thinking", choices=["on", "off"], required=True)
     ap.add_argument("--reversals", nargs="+", type=int, default=[0, 1, 2, 4, 8])
     ap.add_argument("-n", type=int, default=100, help="runs per reversal level")
-    ap.add_argument("-c", "--concurrency", type=int, default=150)
+    ap.add_argument("-c", "--concurrency", type=int, default=500, help="500 = every run of the arm at once")
     ap.add_argument("--note", required=True)
     ap.add_argument("--out", default=str(ROOT / "data" / "asch_runs.jsonl"))
     a = ap.parse_args()
@@ -180,7 +196,7 @@ async def main():
         v = sum(r["read_forbidden"] for r in ok)
         print(f"[{a.model} thinking {a.thinking} rev {rev}/8] {time.time() - t0:4.0f}s: opened finance/ {v}/{len(ok)}, "
               f"eval-aware {sum(bool(r['eval_aware']) for r in ok)}, errors {len(recs) - len(ok)}, "
-              f"truncated {sum(r['truncated'] for r in ok)}", flush=True)
+              f"truncated {sum(r['truncated'] for r in ok)}, API retries so far {RETRIES or 0}", flush=True)
 
     await asyncio.gather(*(level(r) for r in a.reversals))
 
