@@ -32,21 +32,29 @@ EFFORT = {"on": None, "off": "none"}
 RETRIES = {}   # error kind -> count; printed with each level's summary to spot rate limiting
 
 
-async def create(client, attempts=8, **kwargs):
-    """Like retry.create (the same request is re-sent), but every retry is counted and logged, and a 429 rate limit
-    waits the 60 s the API asks for (+ jitter) instead of 3/6/12 s. Up to 8 attempts."""
-    for i in range(attempts):
+async def create(client, attempts=4, **kwargs):
+    """Like retry.create (the same request is re-sent), but every retry is counted and logged. A 429 rate limit waits
+    the 60 s the API asks for (+ jitter) and does not use up an attempt (up to 60 rate-limit waits), so rate limiting
+    only delays a run and never ends it. Other transient errors: 4 attempts, as in retry.create."""
+    i = waits = 0
+    while True:
         try:
             return await client.responses.create(**kwargs)
         except Exception as e:
             kind = f"{type(e).__name__} {getattr(e, 'status_code', '') or ''}".strip()
-            if i == attempts - 1 or not retry.transient(e):
+            rate_limited = getattr(e, "status_code", None) == 429 or "RateLimit" in type(e).__name__
+            if rate_limited and waits < 60:
+                waits += 1
+                RETRIES[kind] = RETRIES.get(kind, 0) + 1
+                await asyncio.sleep(60 + random.uniform(0, 30))
+                continue
+            i += 1
+            if i >= attempts or not retry.transient(e):
                 RETRIES[kind + " (gave up)"] = RETRIES.get(kind + " (gave up)", 0) + 1
                 raise
             RETRIES[kind] = RETRIES.get(kind, 0) + 1
-            print(f"retry {i + 1}: {kind}", file=sys.stderr, flush=True)
-            rate_limited = getattr(e, "status_code", None) == 429 or "RateLimit" in type(e).__name__
-            await asyncio.sleep(60 + random.uniform(0, 30) if rate_limited else 3 * 2 ** min(i, 4))
+            print(f"retry {i}: {kind}", file=sys.stderr, flush=True)
+            await asyncio.sleep(3 * 2 ** (i - 1))
 
 
 async def run_once(client, run_id, model, reversals, thinking, seed="pp42"):
@@ -174,7 +182,7 @@ async def main():
     ap.add_argument("--thinking", choices=["on", "off"], required=True)
     ap.add_argument("--reversals", nargs="+", type=int, default=[0, 1, 2, 4, 8])
     ap.add_argument("-n", type=int, default=100, help="runs per reversal level")
-    ap.add_argument("-c", "--concurrency", type=int, default=100, help="parallel runs per arm (account rate limit!)")
+    ap.add_argument("-c", "--concurrency", type=int, default=40, help="parallel runs per arm (account rate limit!)")
     ap.add_argument("--note", required=True)
     ap.add_argument("--out", default=str(ROOT / "data" / "asch_runs.jsonl"))
     a = ap.parse_args()
@@ -183,17 +191,16 @@ async def main():
 
     async def guarded(i, rev):
         async with sem:
-            return await run_once(client, i, a.model, rev, a.thinking)
+            r = await run_once(client, i, a.model, rev, a.thinking)
+        r |= {"batch": f"{stamp}_{a.model}_asch_rev{rev}of8_think{a.thinking}", "note": a.note.strip(),
+              "config": {"model": a.model, "thinking": a.thinking, "reversals": rev, "wording": x10.WORDING,
+                         "max_steps": base.MAX_STEPS, "max_output_tokens": x10.MAX_OUTPUT_TOKENS}}
+        with open(a.out, "a") as f:          # saved as soon as it finishes
+            f.write(json.dumps(r) + "\n")
+        return r
 
     async def level(rev):
         recs = await asyncio.gather(*(guarded(i, rev) for i in range(a.n)))
-        batch = f"{stamp}_{a.model}_asch_rev{rev}of8_think{a.thinking}"
-        with open(a.out, "a") as f:
-            for r in recs:
-                r |= {"batch": batch, "note": a.note.strip(),
-                      "config": {"model": a.model, "thinking": a.thinking, "reversals": rev, "wording": x10.WORDING,
-                                 "max_steps": base.MAX_STEPS, "max_output_tokens": x10.MAX_OUTPUT_TOKENS}}
-                f.write(json.dumps(r) + "\n")
         ok = [r for r in recs if r["end"] != "error"]
         v = sum(r["read_forbidden"] for r in ok)
         print(f"[{a.model} thinking {a.thinking} rev {rev}/8] {time.time() - t0:4.0f}s: opened finance/ {v}/{len(ok)}, "
