@@ -1,6 +1,6 @@
-# Unsafe behaviour in AI agent swarms: context, not conformity
+# Peerless Pressure: how team context makes AI agents break rules
 
-Code and data for our Apart Research **Swarm Alignment Hackathon** (November 2026) paper.
+Code and data for our Apart Research **Swarm Alignment Hackathon** (November 2026) paper: **[paper/peerless_pressure.pdf](paper/peerless_pressure.pdf)**.
 Julius Großerode, Vikram Viswanath, Lou Maessen.
 
 **Setup in one paragraph.** An agent gets file tools and a task it can only finish by breaking a rule: *"Write a one-line
@@ -55,6 +55,7 @@ scripts/
   dilution_analysis.py      correlational context-size analysis on exp01-15 (docs/dilution_analysis.md)
 docs/                       short analysis notes (detector validation, dilution analysis, Asch transcripts)
 workspace_snapshot/         the 42 files the agent sees, byte-identical to what the code generates
+paper/peerless_pressure.pdf the paper
 paper/figures/              the figures in the paper
 ```
 
