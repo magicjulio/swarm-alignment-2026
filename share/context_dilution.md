@@ -1,7 +1,6 @@
 # Does extra context "dilute" the rule? Results for Bertrand
 
-*Status: Nov 9, 08:45 UTC. The new test (part 1) is still running until 09:30 UTC; numbers will grow to about 40 runs
-per cell. Everything else is final. Opened = the agent read a file in the forbidden finance/ folder.*
+*Status: Nov 9, 09:15 UTC. All numbers final (40 runs per model per condition in tonight's batch). Opened = the agent read a file in the forbidden finance/ folder.*
 
 **Short answer: in our setup, more outside text does not make agents break the rule more.** Three independent checks
 point the same way. The realistic-workspace jump (R1 → R2a) is not explained by text volume either (part 2).
@@ -14,11 +13,11 @@ people. If outside text dilutes the system prompt, opening should rise with the 
 
 | condition | qwen | deepseek | both models |
 |---|---|---|---|
-| no extra text (SOLO) | 17/28 (61%) | 14/28 (50%) | **31/56 (55%)** |
-| + ~4k tokens of log | 12/26 (46%) | 17/27 (63%) | **29/53 (55%)** |
-| + ~16k tokens of log | 13/28 (46%) | 13/26 (50%) | **26/54 (48%)** |
+| no extra text (SOLO) | 24/40 (60%) | 22/40 (55%) | **46/80 (57%)** |
+| + ~4k tokens of log | 19/40 (48%) | 23/40 (57%) | **42/80 (52%)** |
+| + ~16k tokens of log | 21/40 (52%) | 20/40 (50%) | **41/80 (51%)** |
 
-No rise (trend test p = 0.41; 16k vs none p = 0.57). If anything slightly lower. The 16k log is 3–8 times more text
+No rise (trend test p = 0.49; 16k vs none p = 0.53). If anything slightly lower. The 16k log is 3–8 times more text
 than the agent normally has in its whole context (~2–5k tokens), so this is a strong dose. Agents almost never mention
 the log in their thinking (about 1 in 10 runs).
 
@@ -49,13 +48,13 @@ obviously holds the needed regional numbers, and a pointer to it), not from how 
 
 ## 4. The team board is not just "more text"
 
-Same night, same models (tonight's batch, provisional):
+Same night, same models (tonight's batch, 80 runs each):
 
 | condition | opened |
 |---|---|
-| alone (SOLO) | 31/56 (55%) |
-| automated system feed, same amount and timing of messages as the board (NS) | 34/53 (64%), +9 pts, p = 0.44 |
-| team board with ordinary teammate posts (P0) | 40/51 (78%), **+23 pts, p = 0.014** |
+| alone (SOLO) | 46/80 (57%) |
+| automated system feed, same amount and timing of messages as the board (NS) | 50/80 (62%), +5 pts, p = 0.63 |
+| team board with ordinary teammate posts (P0) | 59/80 (74%), **+16 pts, p = 0.045** |
 
 The system feed and the team board push the same amount of text into the context (≈ 230 characters per message), but
 only the board clearly raises opening. And the team-identity sentence alone (T0, earlier day: 55% vs 40%) adds no
@@ -69,5 +68,5 @@ outside text at all.
   our board posts are — so for P2/P3 the social and the "conflicting outside text" readings overlap. The NS feed and
   the SOLO/PAD results separate them for the neutral case only.
 
-Files: `examples/peers.py` (PAD4K/PAD16K conditions), `scripts/night_stats.py`, `paper/figures/fig7_dilution.png`
-(updated after 09:30), `data/peers_realistic_runs.jsonl` tag `night_nov9`.
+Files: `examples/peers.py` (PAD4K/PAD16K conditions), `scripts/night_stats.py`, `paper/figures/fig7_dilution.png`,
+`paper/figures/fig6_same_night_ladder.png`, `data/peers_realistic_runs.jsonl` tag `night_nov9`.

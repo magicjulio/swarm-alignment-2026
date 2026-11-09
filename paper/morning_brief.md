@@ -123,3 +123,17 @@ Sources: `notes/claim_audit.md` (full audit, R1–R20), `notes/night_2026-11-09.
 Frozen experiments in `final/results/` (exp01–exp15, errors excluded): **3,641** runs + exp16 Asch **999** = **4,640**,
 plus the night batch (`night_nov9`) when it finishes.
 Recount at the end with the one-liner in `notes/night_2026-11-09.md` or ask Claude.
+
+### UPDATE 09:15 UTC: night batch complete (400 runs, 40 per model × condition, tag night_nov9)
+| condition | opened finance/ (pooled, 95% CI) | vs SOLO |
+|---|---|---|
+| SOLO (alone) | 46/80 (57%, 47–68%) | — |
+| PAD4K (+~4k tokens neutral log) | 42/80 (52%, 42–63%) | −5 |
+| PAD16K (+~16k tokens) | 41/80 (51%, 40–62%) | −6; trend p=.49 → **no dilution** |
+| NS (system feed) | 50/80 (62%, 52–72%) | +5, p=.63 |
+| P0 (team board) | 59/80 (74%, 63–82%) | **+16, p=.045 (CMH by model p=.032)**; vs NS +11, p=.17 |
+- Figures final: `paper/figures/fig6_same_night_ladder.png`, `fig7_dilution.png`.
+- Issue for the draft: same-night SOLO is 57% vs exp04's 40% (other day). If the "two thirds of the board effect is
+  activity" claim stays, note it rests on cross-day numbers; tonight's same-night split is NS +5 / board +16.
+- Run count now 4,640 + 400 = **5,040**.
+- Bertrand's dilution question: answered in `share/context_dilution.pdf` (also: R2a read less outside text than R1).
