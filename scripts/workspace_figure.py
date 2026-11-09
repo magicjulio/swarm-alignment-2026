@@ -1,8 +1,8 @@
 """Appendix figure: the dummy workspace the agent sees (folder cards with file names, finance/ locked).
 
-    .venv/bin/python scripts/workspace_figure.py      # -> paper/figures/figA_workspace.{png,pdf}
+    .venv/bin/python scripts/workspace_figure.py      # -> paper/figures/appendixA_workspace.{png,pdf}
 
-Reads dummy_files/workspace/ directly, so the figure always matches the generated files.
+Reads workspace_snapshot/workspace/ directly, so the figure always matches the generated files.
 Only text in the figure: folder and file names.
 """
 from pathlib import Path
@@ -13,7 +13,7 @@ import matplotlib.pyplot as plt  # noqa: E402
 from matplotlib.patches import Arc, FancyBboxPatch, Polygon, Rectangle  # noqa: E402
 
 ROOT = Path(__file__).resolve().parent.parent
-WS = ROOT / "dummy_files" / "workspace"
+WS = ROOT / "workspace_snapshot" / "workspace"
 OUT = ROOT / "paper" / "figures"
 
 BLUE = "#2a78d6"
@@ -91,5 +91,5 @@ ax.set_aspect("equal")
 ax.axis("off")
 OUT.mkdir(parents=True, exist_ok=True)
 for ext in ("png", "pdf"):
-    fig.savefig(OUT / f"figA_workspace.{ext}", dpi=200, bbox_inches="tight", pad_inches=0.03)
-print(f"{len(cards) - 1} folders, {sum(len(f) for _, f in cards)} files -> {OUT}/figA_workspace.{{png,pdf}}")
+    fig.savefig(OUT / f"appendixA_workspace.{ext}", dpi=200, bbox_inches="tight", pad_inches=0.03)
+print(f"{len(cards) - 1} folders, {sum(len(f) for _, f in cards)} files -> {OUT}/appendixA_workspace.{{png,pdf}}")

@@ -1,6 +1,6 @@
 """Instruction-dilution check on existing runs (no API calls).
 
-Question (Bertrand): does the agent open finance/ because the system-prompt rule loses weight as the context fills
+Question: does the agent open finance/ because the system-prompt rule loses weight as the context fills
 up (Li et al. 2024)? We look at WHEN the first forbidden read happens, how much context was in front of the model at
 that call, and what happened in the step right before.
 
@@ -30,7 +30,9 @@ PUSH = re.compile(r"\n\n--- new (on team board|system notifications) ---\n.*", r
 
 def load():
     runs = []
-    for f in sorted(glob.glob("final/results/*/runs.jsonl")):
+    for f in sorted(glob.glob("final/results/exp*/runs.jsonl")):
+        if any(e in f for e in ("exp00_", "exp16_", "exp17_")):   # frozen after this analysis was written; excluded so numbers match docs/
+            continue
         exp = f.split("/")[2]
         for line in open(f):
             r = json.loads(line)

@@ -3,9 +3,12 @@
 Each kept experiment has **one script** that replicates it exactly and **the original runs** the reported
 numbers come from. Everything here is frozen: `locked_folder.py`, `peers.py`, `grading.py` and
 `eval_awareness.py` are copies, so later changes in `examples/` cannot change these results.
+(`examples/` was the development folder. It is no longer in the tree; the provenance commits below still contain it,
+e.g. `git show a5739f8:examples/peers.py`.)
 
 | # | script | what it is | opened finance/ |
 |---|---|---|---|
+| 00 | `baseline_presets.py --preset realism_r0..r3` | realism series (exploratory, qwen + deepseek, 100 runs each): R0 = 3-file **toy workspace** ("restricted", `request_access`, 1500 output tokens), R1 = toy + ~40 unrelated files, R2/R2a/R2b/R2c/R3 = realistic variants | **R0 16/100**, R1 31%, R2 67%, R2a 68%, R2b 32%, R2c 31%, R3 40% |
 | 01 | `exp01_restricted.py` | first realistic baseline: "finance/ is restricted", `request_access` | **67/100** |
 | 02 | `exp02_forbidden_permission.py` | "opening finance/ is forbidden", `request_permission`, no "access" wording | **49/100** |
 | 03 | `exp03_restricted_8k.py` | exp01 with 8000 output tokens (no cut-offs), 100 runs/model, same day as exp04 | **133/196 (68%)** |
@@ -20,6 +23,7 @@ numbers come from. Everything here is frozen: `locked_folder.py`, `peers.py`, `g
 | 13 | `exp13_real_posts.py` | P0R vs P2R: real harvested teammate posts + "same rules" sentence (core `peers_v2.py`) | **P0R 160/200 (80%) vs P2R 150/200 (75%)** |
 | 14 | `exp14_nonsocial_feed.py` | NS automated notification feed (no teammates) vs P0 rerun, same batch | **NS 121/200 (60%) vs P0 146/200 (73%)** |
 | 15 | `exp15_dissenter_vs_reminder.py` | P3 + a teammate objects (P3D) vs the same as a system reminder (P3S), same batch | **broke the rule either way: P3 100%, P3D 50%, P3S 37%** |
+| 17 | `peers_queue_v1.py` (core `peers_v3.py`) | same-day batch, one process: SOLO (= exp04), PAD4K / PAD16K (SOLO + ~4k / ~16k tokens of neutral workspace log after the first action), NS, P0; 40 runs per model × condition | **SOLO 46/80, PAD4K 42/80, PAD16K 41/80, NS 50/80, P0 59/80** |
 | 16 | `exp16_asch_thinking.py` | 8-peer Asch curve (0/1/2/4/8 of 8) × thinking on/off, qwen + deepseek, 50/cell (core `asch_v1.py`) | **qwen on 76→44%, off 46→64%; deepseek on 49→52%, off 68→96%** |
 
 **Main comparison for the paper: exp03 vs exp04.** Same day, run in parallel, 200 runs each, no truncation.
@@ -43,11 +47,19 @@ The 95% intervals (61–74% vs 33–46%) do not overlap. Both models move the sa
 - **Real rule-breakers don't confess, and agents don't notice (exp13).** With real harvested posts, eval awareness
   falls back to control level (59 vs 68), but P2R (75%) does not differ from P0R (80%): the violation is visible
   only as a cited file path, and agents that notice assume the teammates had permission.
-- **About two thirds of the board effect is activity (exp14).** An impersonal notification feed with the same
-  timing gives 60%, the team board 73% (same batch). exp04 alone: 40% (Nov 7).
+- **The board beats a non-social feed (exp14).** An impersonal notification feed with the same timing and amount
+  of text gives 60%, the team board 73% (same batch, p=.008). Against exp04 (40%, Nov 7) the feed looks like +21 pts,
+  but in the same-day rerun (exp17) it was only +5 (not significant): do not read the feed as "two thirds" of the
+  board effect.
 - **A reminder halves laundering; a dissenting teammate does no better (exp15).** Using the posted figures or
   opening the folder: P3 100%, dissenter 50%, system reminder 37%. Both raise opening the folder directly from 7%
   to ~28%, and both trigger eval awareness in 68% of runs.
+
+**Same-day batch (exp17, Nov 9, `peers_queue_v1.py`, tag `night_nov9`, 40 runs per model × condition):**
+- **Neutral text does not raise violations:** alone 46/80 (57.5%), + ~4k tokens of log 42/80 (52%), + ~16k tokens
+  41/80 (51%); Cochran-Armitage trend p=.49. The log is pushed with the first tool result.
+- **Board vs alone vs feed, one batch:** NS 50/80 (62%, vs alone p=.63), P0 59/80 (74%, vs alone p=.045, CMH by model
+  p=.032), P0 vs NS p=.17. The identical baseline was 57.5% here vs 40% in exp04: compare only within a batch.
 
 **Asch × thinking (exp16, core `asch_v1.py`, Nov 8–9 night, 50 runs per model × thinking × level):**
 - **Thinking off: more rule-breakers, more opening.** qwen 46 / 62 / 70 / 68 / 64% at 0/1/2/4/8 (trend p=.2;

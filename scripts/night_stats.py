@@ -1,4 +1,4 @@
-"""Same-night batch (tag night_nov9) in data/peers_realistic_runs.jsonl: dilution test and the context ladder.
+"""Same-night batch exp17 (tag night_nov9, final/results/exp17_same_night/runs.jsonl): dilution test and the context ladder.
 
     .venv/bin/python scripts/night_stats.py [path] [--tag night_nov9]
 Conditions: SOLO = alone (exp04 setup); PAD4K / PAD16K = SOLO + ~4k / ~16k tokens of neutral workspace sync log pushed
@@ -75,7 +75,7 @@ def fmt_p(p):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("path", nargs="?", default=ROOT / "data" / "peers_realistic_runs.jsonl")
+    ap.add_argument("path", nargs="?", default=ROOT / "final" / "results" / "exp17_same_night" / "runs.jsonl")
     ap.add_argument("--tag", default="night_nov9")
     a = ap.parse_args()
     rs = load(a.path, a.tag)

@@ -66,11 +66,19 @@ def hbars(ax, rows, key, color, xmax=100):
     ax.tick_params(axis="y", length=0)
 
 
+# internal figure name -> file name in paper/figures/ (numbered as in the paper); other figures go to extra/
+PAPER = {"fig0_setup": "fig1_workspace_and_wording", "fig1b_identity_activity": "fig2_team_context",
+         "fig7_dilution": "fig3_neutral_text", "fig5_asch_thinking": "fig4_asch_thinking_on_off",
+         "fig4_laundering_disclosure": "fig5_illicit_information"}
+
+
 def save(fig, name):
+    out = OUT / PAPER[name] if name in PAPER else OUT / "extra" / name
+    out.parent.mkdir(parents=True, exist_ok=True)
     for ext in ("png", "pdf"):
-        fig.savefig(OUT / f"{name}.{ext}", dpi=200, bbox_inches="tight")
+        fig.savefig(f"{out}.{ext}", dpi=200, bbox_inches="tight")
     plt.close(fig)
-    print("wrote", OUT / f"{name}.png")
+    print("wrote", f"{out}.png")
 
 
 # ---------------------------------------------------------------- fig 5: Asch dose-response, thinking on vs off
@@ -80,7 +88,7 @@ ASCH_LEVELS = [0, 1, 2, 4, 8]
 
 def fig5_asch_thinking(path=ROOT / "final" / "results" / "exp16_asch_thinking" / "runs.jsonl", max_run_id=50):
     """x = teammates (of 8) who posted that they broke the rule, y = % runs that opened finance/ (Wilson 95% CI);
-    one panel per model, thinking on (solid) vs off (light, dashed). Data: final/results/exp16_asch_thinking/runs.jsonl (= data/asch_runs.jsonl, run_id < 50)."""
+    one panel per model, thinking on (solid) vs off (light, dashed). Data: final/results/exp16_asch_thinking/runs.jsonl ."""
     sys.path.insert(0, str(ROOT / "scripts"))
     from asch_stats import load
     rs = load(path, max_run_id)
@@ -125,7 +133,7 @@ def fig5_asch_thinking(path=ROOT / "final" / "results" / "exp16_asch_thinking" /
 
 
 # ---------------------------------------------------------------- fig 6 / fig 7: same-night batch (tag night_nov9)
-NIGHT_PATH = ROOT / "data" / "peers_realistic_runs.jsonl"
+NIGHT_PATH = RES / "exp17_same_night" / "runs.jsonl"
 MODEL_MARKERS = {"qwen3.8-27b": ("o", "Qwen3.8-27B"), "deepseek-v4-flash": ("s", "DeepSeek-V4-Flash")}
 
 
@@ -266,7 +274,7 @@ def load_tag(path, tag):
     return [r for r in map(json.loads, open(ROOT / path)) if r.get("tag") == tag and r["end"] != "error"]
 
 
-cols = [("Toy workspace\n'restricted'", load_tag("data/realism_series_runs.jsonl", "realism_r0"), "ref"),
+cols = [("Toy workspace\n'restricted'", load_tag("final/results/exp00_realism_series/runs.jsonl", "realism_r0"), "ref"),
         ("Realistic workspace\n'restricted'", runs("exp03_restricted_8k"), ""),
         ("Realistic workspace\n'forbidden'\n(baseline)", runs("exp04_forbidden_permission_8k"), "base")]
 fig, ax = plt.subplots(figsize=(5.6, 4.0))

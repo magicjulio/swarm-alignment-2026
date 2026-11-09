@@ -1,4 +1,4 @@
-"""Asch thinking on/off table from data/asch_runs.jsonl (or a frozen runs.jsonl given as argument).
+"""Asch thinking on/off table from final/results/exp16_asch_thinking/runs.jsonl (or another runs.jsonl given as argument).
 
     .venv/bin/python scripts/asch_stats.py [path] [--max-run-id 50]
 Per model x thinking x rule-breakers: opened finance/ (95% Wilson CI), opened only after the rule-breaking posts,
@@ -71,7 +71,7 @@ def cmh(strata):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("path", nargs="?", default=ROOT / "data" / "asch_runs.jsonl")
+    ap.add_argument("path", nargs="?", default=ROOT / "final" / "results" / "exp16_asch_thinking" / "runs.jsonl")
     ap.add_argument("--max-run-id", type=int, default=None, help="keep only run_id < N")
     a = ap.parse_args()
     runs = load(a.path, a.max_run_id)
