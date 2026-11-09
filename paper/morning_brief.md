@@ -113,3 +113,8 @@ Suggested freeze: re-run all five at ~09:35 UTC, then stop touching numbers.
 
 Sources: `notes/claim_audit.md` (full audit, R1–R20), `notes/night_2026-11-09.md`, `notes/ea_validation.md`,
 `notes/asch_qualitative.md`, `notes/dilution_analysis.md`, `final/README.md`, `paper/story_and_claims.md`.
+
+### Run count for "XYZ runs" (05:50 UTC)
+Frozen experiments in `final/results/` (exp01–exp15, errors excluded): **3,641** runs. Plus tonight's Asch runs
+(`data/asch_runs.jsonl`, no errors, no smoke): 660 so far → 4,301, rising as deepseek and the night batch finish.
+Recount at the end with the one-liner in `notes/night_2026-11-09.md` or ask Claude.
