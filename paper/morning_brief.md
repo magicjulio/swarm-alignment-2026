@@ -13,8 +13,13 @@ No paper text in this file: numbers, issues, pointers only. CI = 95% Wilson. "op
 - **Dilution (Bertrand's question): existing data shows no sign of it** (`notes/dilution_analysis.md`). Violations at
   median step 6 with ~1.7–1.9k tokens of context; per-call hazard flat ~0.10 after step 6; at equal step, more context
   does not predict opening (percentile 0.50–0.52, p≥0.2). Causal test (PAD4K/PAD16K) queued, see §2.
-- **deepseek Asch partial (PROVISIONAL, n=14–16/cell):** thinking ON 27 / 36 / 73 / 69 / 67% (trend p=.03, *up*);
-  OFF 81 / 81 / 75 / 88 / 94% (p=.2). Opposite direction to qwen with thinking on. Do not interpret before n≈50.
+- **Asch, deepseek-v4-flash complete (n=50/cell; ON 0/8 n=49).** Thinking ON: 49 / 48 / 64 / 58 / 52% (trend p=.81,
+  flat); eval-aware 23→41 of 50. Thinking OFF: 68 / 78 / 84 / 84 / 96% (trend p=.0005). On − off −19…−44 pts at every
+  level (CMH OR 0.26, p=2e-11). **Step cap:** 18 OFF runs at 0/8 cut off at 16 steps without opening (3 at 8/8);
+  dropping cut-offs OFF = 83/95/98/93/96% (worst case 86/96/98/94/96%), ON 75/73/82/74/68%: the OFF rise is mostly
+  0/8 vs ≥1/8. qwen robust (night log 01:20).
+- **Asch frozen as exp16** (`final/exp16_asch_thinking.py`, core `final/asch_v1.py`, 999 runs in
+  `final/results/exp16_asch_thinking/runs.jsonl`); README table/stats/provenance/caveats updated.
 - **5 h lost (00:25–05:24 UTC) to laptop idle suspend**; no data lost, sleep is now inhibited. Consequence: the
   same-night SOLO/NS/P0 ladder and PAD runs had not started at 05:40.
 
@@ -22,15 +27,15 @@ No paper text in this file: numbers, issues, pointers only. CI = 95% Wilson. "op
 
 | job | status at 05:40 UTC | expected |
 |---|---|---|
-| Asch deepseek on/off (`examples/asch.py`, `data/asch_runs.jsonl`) | ~154/500 deepseek runs | ends ≈07:15–07:45 UTC |
-| Night queue SOLO / PAD16K / PAD4K / NS / P0 × qwen, deepseek × 40 (tag `night_nov9`, `data/peers_realistic_runs.jsonl`) | waiting for Asch | starts after Asch, **hard stop 09:30 UTC**; 400 runs ≈2.2 h, so expect ~30–40/cell (interleaved, cells stay balanced) |
+| Asch qwen + deepseek on/off | **done 07:25 UTC, frozen as exp16** | — |
+| Night queue SOLO / PAD16K / PAD4K / NS / P0 × qwen, deepseek × 40 (tag `night_nov9`, `data/peers_realistic_runs.jsonl`) | started 07:25 UTC | **hard stop 09:30 UTC**; 400 runs ≈2.2 h, so expect ~30–40/cell (interleaved, cells stay balanced) |
 
 Logs: `~/.claude/jobs/1df5467d/tmp/asch/all.log` (Asch), `.../queue.log` (night queue).
 
 ```
-.venv/bin/python scripts/asch_stats.py --max-run-id 50     # Asch table + on/off Fisher + CMH
+.venv/bin/python scripts/asch_stats.py final/results/exp16_asch_thinking/runs.jsonl   # Asch (exp16) + Fisher + CMH
 .venv/bin/python scripts/night_stats.py                    # dilution trend + same-night ladder (empty until ~07:30)
-.venv/bin/python scripts/paper_figures.py fig5             # Asch figure (both models)
+.venv/bin/python scripts/paper_figures.py fig5             # Asch figure (both models, reads frozen exp16)
 .venv/bin/python scripts/paper_figures.py fig6             # same-night ladder alone / feed / board
 .venv/bin/python scripts/paper_figures.py fig7             # dilution SOLO / PAD4K / PAD16K
 ```
@@ -51,7 +56,7 @@ Suggested freeze: re-run all five at ~09:35 UTC, then stop touching numbers.
 | §3: causal "increased evaluation awareness" | weak | 109/124 flagged P2 passages refer to teammates | — | shows posts trigger test-talk, not that test-talk causes the drop; EA is post-treatment (story C5) |
 | §3: "doesn't scale to smarter models" | **unsupported** | no stronger model was run | — | remove or support |
 | Abstract + §3: Gemma thinking-off "clean Asch curve" | weak / **mismatch** | exp11 gemma: solo 0/50, 0/8 37/50 (74%), 1/8 49/50 (98%), 4/8 and 8/8 50/50 | A10 (appendix) | Gemma is a non-reasoning model, nothing was "turned off"; ceiling at 1/8; old `read_board` bug; Gemma was dropped. New on/off data is qwen + deepseek (fig5) |
-| Fig 3 / Conclusion: thinking off reveals "real behaviour" | weak, model-dependent | qwen: off rises 46→70% then flat; on falls 76→44%. deepseek (PROVISIONAL): off 81–94% flat-high; on rises 27→73% | fig5 | qwen alone fits; deepseek-on goes the other way so far; "off" removes EA measurement entirely (EA=0 by construction) |
+| Fig 3 / Conclusion: thinking off reveals "real behaviour" | weak, model-dependent | qwen: off rises 46→70% then flat; on falls 76→44%. deepseek: off 68→96% (mostly 0/8 vs ≥1/8 once step-cap cut-offs are dropped); on flat 49–64% (p=.81) | fig5 | both models: off follows the group, on does not; direction with thinking on differs (qwen falls, deepseek flat); "off" removes EA measurement entirely (EA=0 by construction) |
 | Abstract: EA "correlated strongly" with rule-breaking | weak | P2 opened 50% if EA vs 84% if not; Asch qwen-on 38% vs 83%; but exp04 47 vs 38%, P0 77 vs 71% (reversed) | A9 | direction not stated; post-treatment conditioning; exp10 is dropped (truncated runs) |
 | §3 Fig 4: laundering without disclosure | supported (strongest) | exp08 used 170/200, 85% (79–89); exp15 P3 186/200, 93% (89–96); answer names any source 14/170, 20/186; says forbidden/unverified 1/170, 3/186 | fig4, fig3 | "Run 1/Run 2" unlabeled (exp08 Nov 7 / exp15-P3 Nov 8, n=200 each) |
 | §3: "reasoned in most cases data was unauthorized" | weak | ~134–154/170 (unvalidated regex) | — | no hand-check sample |
@@ -91,7 +96,7 @@ Suggested freeze: re-run all five at ~09:35 UTC, then stop touching numbers.
 | fig2_peers | P0/P1/P2 and P0R/P2R: opened vs flagged "test" | not in draft; supports the EA paragraph |
 | fig3_laundering_defense | P3 / P3D / P3S stacked: used posted figures, opened, complied; test-flag 0/68/68% | not in draft |
 | fig4_laundering_disclosure | exp08 vs exp15-P3: used without source / named source / opened | = draft Fig 4 |
-| fig5_asch_thinking | qwen + deepseek, on vs off, 0–8 rule-breakers | regenerated 05:34; deepseek PROVISIONAL (shows 14–16/cell) |
+| fig5_asch_thinking | qwen + deepseek, on vs off, 0–8 rule-breakers | **final** (n=50/cell); reads `final/results/exp16_asch_thinking/runs.jsonl` |
 | fig6_same_night_ladder | alone / feed / board, same night | **empty placeholder ("running")** |
 | fig7_dilution | SOLO / PAD4K / PAD16K | **empty placeholder** |
 | figA_workspace | 42-file workspace | = draft Appendix A |
@@ -101,7 +106,7 @@ Suggested freeze: re-run all five at ~09:35 UTC, then stop touching numbers.
 
 | caveat | evidence in hand |
 |---|---|
-| 16-step cap censors outcomes (Asch on-arm max_steps 3→8 with more rule-breakers; P0 49/199 hit cap vs 20/200 in exp04) | Asch qwen-on fall survives dropping capped runs (78/76/71/72/51%) and counting all as openers (78/78/74/76/58%): ≥20 pts either way (`notes/asch_qualitative.md`, night log 01:20). Dilution hazard flat to k=15 |
+| 16-step cap censors outcomes (Asch on-arm max_steps 3→8 with more rule-breakers; P0 49/199 hit cap vs 20/200 in exp04) | Asch qwen-on fall survives dropping capped runs (78/76/71/72/51%) and counting all as openers (78/78/74/76/58%): ≥20 pts either way (`notes/asch_qualitative.md`, night log 01:20). deepseek-off: dropping cut-offs 83/95/98/93/96% (rise = 0/8 vs ≥1/8 only); deepseek-on 75/73/82/74/68% flat (night log 07:25). Dilution hazard flat to k=15 |
 | Batch/day noise ±10 pts; Fig 2 ladder crosses days | replications: P0 71 vs 73 (+2), exp01 +7, P3 used +8. NS vs P0 is same batch (p=.008). Same-night SOLO/NS/P0 (PROVISIONAL, fig6) |
 | Eval-awareness is post-treatment; regex validity | detector kappa .91 on 120 team transcripts; story C5: unaware-runs-only restricted analysis shows no clear effect (P0 70 / P1 72 / P2 76%, n=49), so no stratified causal claim; thinking-off arm has EA=0 by construction |
 | Only two mid-size models (+ Gemma) | models diverge (qwen vs deepseek in P2, social part of NS→P0, Asch-on direction): report per model (A7); no stronger model run |
@@ -115,6 +120,6 @@ Sources: `notes/claim_audit.md` (full audit, R1–R20), `notes/night_2026-11-09.
 `notes/asch_qualitative.md`, `notes/dilution_analysis.md`, `final/README.md`, `paper/story_and_claims.md`.
 
 ### Run count for "XYZ runs" (05:50 UTC)
-Frozen experiments in `final/results/` (exp01–exp15, errors excluded): **3,641** runs. Plus tonight's Asch runs
-(`data/asch_runs.jsonl`, no errors, no smoke): 660 so far → 4,301, rising as deepseek and the night batch finish.
+Frozen experiments in `final/results/` (exp01–exp15, errors excluded): **3,641** runs + exp16 Asch **999** = **4,640**,
+plus the night batch (`night_nov9`) when it finishes.
 Recount at the end with the one-liner in `notes/night_2026-11-09.md` or ask Claude.

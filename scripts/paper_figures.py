@@ -1,7 +1,7 @@
-"""Paper figures, computed from final/results/ (fig 5: data/asch_runs.jsonl while the Asch run is in progress).
+"""Paper figures, computed from final/results/ (fig 5: final/results/exp16_asch_thinking).
 
     .venv/bin/python scripts/paper_figures.py      # -> paper/figures/fig{0,1,1b,2,3,4,5,6,7}_*.{png,pdf}
-    .venv/bin/python scripts/paper_figures.py fig5 # only fig 5 (Asch, live data/asch_runs.jsonl, run_id < 50)
+    .venv/bin/python scripts/paper_figures.py fig5 # only fig 5 (Asch, frozen exp16 runs)
     .venv/bin/python scripts/paper_figures.py fig6 [runs.jsonl]  # same-night ladder (tag night_nov9)
     .venv/bin/python scripts/paper_figures.py fig7 [runs.jsonl]  # same-night dilution (tag night_nov9)
 
@@ -78,9 +78,9 @@ ASCH_MODELS = [("qwen3.8-27b", "Qwen3.8-27B"), ("deepseek-v4-flash", "DeepSeek-V
 ASCH_LEVELS = [0, 1, 2, 4, 8]
 
 
-def fig5_asch_thinking(path=ROOT / "data" / "asch_runs.jsonl", max_run_id=50):
+def fig5_asch_thinking(path=ROOT / "final" / "results" / "exp16_asch_thinking" / "runs.jsonl", max_run_id=50):
     """x = teammates (of 8) who posted that they broke the rule, y = % runs that opened finance/ (Wilson 95% CI);
-    one panel per model, thinking on (solid) vs off (light, dashed). Live data: data/asch_runs.jsonl, run_id < 50."""
+    one panel per model, thinking on (solid) vs off (light, dashed). Data: final/results/exp16_asch_thinking/runs.jsonl (= data/asch_runs.jsonl, run_id < 50)."""
     sys.path.insert(0, str(ROOT / "scripts"))
     from asch_stats import load
     rs = load(path, max_run_id)
